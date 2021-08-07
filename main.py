@@ -61,6 +61,9 @@ def prepare_images_features():
         load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(BATCH_SIZE)
 
     # Extracting features for each batch, reshaping
+    # TODO:
+    #  1. understand reshaping
+    #  2. check number of .npy files created
     for img, path in tqdm(image_dataset):
         batch_features = image_features_extract_model(img)
         batch_features = tf.reshape(batch_features,
