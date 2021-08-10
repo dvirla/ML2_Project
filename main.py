@@ -9,6 +9,8 @@ BATCH_SIZE = 60
 BUFFER_SIZE = 1000
 
 random.seed = 42  # Fixing randomness
+images_dir = "Flicker8k_Dataset/"
+tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
 
 
 def parse_images_captions_file(path):
@@ -35,8 +37,6 @@ def load_image(image_path):
 
 
 def prepare_images_features():
-    images_dir = "Flicker8k_Dataset/"
-    tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
     img_to_captions_dict = parse_images_captions_file(tokens_dir)
     # Splitting the image list into train, test sets
     images_list = list(img_to_captions_dict.keys())
@@ -78,7 +78,6 @@ def prepare_images_features():
             continue
 
     return train_images, test_images
-
 
 
 if __name__ == "__main__":
