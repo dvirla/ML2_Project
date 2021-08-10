@@ -4,6 +4,8 @@ from collections import defaultdict
 import random
 import numpy as np
 from tqdm import tqdm
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
 
 BATCH_SIZE = 60
 BUFFER_SIZE = 1000
@@ -131,7 +133,7 @@ class prepare_captions():
 
         for img in self.train_imgs:
             for padded_idx in self.padded_captions_idxs_dict[img]:
-                X_train.append(img_dir + img + ".npy")
+                X_train.append(images_dir + img + ".npy")
                 y_train.append(padded_idx)
 
         for img in self.test_imgs:
