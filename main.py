@@ -8,6 +8,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import re
 import os
+import time
 
 BATCH_SIZE = 60
 BUFFER_SIZE = 1000
@@ -150,12 +151,99 @@ class prepare_captions():
         return X_train, y_train, X_test, y_test
 
 
+class AttentionModel(tf.keras.Model):
+    def __init__(self, dim):
+        super(AttentionModel, self).__init__()
+        self.layer1 = tf.keras.layers.Dense(dim)
+        self.layer2 = tf.keras.layers.Dense(dim)
+        self.pred_layer = tf.keras.layers.Dense(1)
+
+    @tf.function
+    def call(self, hidden, features):
+        # features(CNN_encoder output) shape == (batch_size, 64, embedding_dim)
+        # hidden shape == (batch_size, hidden_size)
+        # hidden_with_time_axis shape == (batch_size, 1, hidden_size)
+        hidden_with_time_axis = tf.expand_dims(hidden, 1)
+
+        # attention_hidden_layer shape == (batch_size, 64, units)
+        attention_hidden_layer = (tf.nn.tanh(self.layer1(features) + self.layer2(hidden_with_time_axis)))
+
+        # score shape == (batch_size, 64, 1)
+        # This gives you an unnormalized score for each image feature.
+        score = self.pred_layer(attention_hidden_layer)
+
+        # attention_weights shape == (batch_size, 64, 1)
+        attention_weights = tf.nn.softmax(score, axis=1)
+
+        # context_vector shape after sum == (batch_size, hidden_size)
+        context_vector = attention_weights * features
+        context_vector = tf.reduce_sum(context_vector, axis=1)
+
+        return context_vector, attention_weights
+
+
+class Encoder(tf.keras.Model):
+    # Since we have already extracted the features and dumped it
+    # This encoder passes those features through a Fully connected layer and allows choosing a subset of them
+    def __init__(self, embedding_dim):
+        super(Encoder, self).__init__()
+        # shape after fc == (batch_size, 64, embedding_dim)
+        self.layer1 = tf.keras.layers.Dense(embedding_dim)
+
+    @tf.function
+    def call(self, x):
+        x = self.layer1(x)
+        x = tf.nn.relu(x)
+        return x
+
+
+class RNN_Decoder(tf.keras.Model):
+    def __init__(self, embedding_dim, dim, vocab_size):
+        super(RNN_Decoder, self).__init__()
+        self.dim = dim
+        self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_dim)
+        # TODO: try with bidirectional
+        self.lstm = tf.keras.layers.LSTM(self.dim, return_sequences=True, return_state=True)
+        self.layer1 = tf.keras.layers.Dense(self.dim)
+        # TODO: check option to ommit fc1
+        self.layer2 = tf.keras.layers.Dense(vocab_size)
+        self.attention = AttentionModel(self.dim)
+
+    @tf.function
+    def call(self, x, features, hidden):
+        # defining attention as a separate model
+        context_vector, attention_weights = self.attention(features, hidden)
+
+        # x shape after passing through embedding == (batch_size, 1, embedding_dim)
+        x = self.embedding(x)
+
+        # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
+        x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
+
+        # passing the concatenated vector to the LSTM
+        h_seq, state = self.lstm(x)
+
+        # shape == (batch_size, max_length, hidden_size)
+        x = self.layer1(h_seq)
+
+        # x shape == (batch_size * max_length, hidden_size)
+        x = tf.reshape(x, (-1, x.shape[2]))
+
+        # output shape == (batch_size * max_length, vocab)
+        x = self.layer2(x)
+
+        # TODO: check option to remove attention_weights
+        return x, state, attention_weights
+
+    def reset_state(self, batch_size):
+        return tf.zeros((batch_size, self.units))
+
+
 if __name__ == "__main__":
     # preprocess images and captions and split into train and test sets
     img_to_captions_dict, train_imgs, test_imgs = prepare_images_features()
     prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
     X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
-    os.system("find /home/student/dvir/ML2_Project/Flicker8k_Dataset -name '*.npy' -delete")
 
     # create dataset
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
@@ -163,4 +251,90 @@ if __name__ == "__main__":
     train_dataset.batch(BATCH_SIZE)
     train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
+    # training
+    embedding_dim = 256
+    units = 512
+    vocab_size = prepare_captions.vocab_size
+    num_steps = len(X_train) / BATCH_SIZE
+    # Shape of the vector extracted from InceptionV3 is (64, 2048)
+    # These two variables represent that vector shape
+    features_shape = 2048
+    attention_features_shape = 64
+
+    encoder = Encoder(embedding_dim)
+    decoder = RNN_Decoder(embedding_dim, units, vocab_size)
+
+    optimizer = tf.keras.optimizers.Adam()
+    loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
+        from_logits=True, reduction='none')
+
+
+    def loss_function(real, pred):
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        loss_ = loss_object(real, pred)
+
+        mask = tf.cast(mask, dtype=loss_.dtype)
+        loss_ *= mask
+
+        return tf.reduce_mean(loss_)
+
+
+    loss_plot = []
+
+
+    def train_step(img_tensor, target):
+        loss = 0
+
+        # initializing the hidden state for each batch
+        # because the captions are not related from image to image
+        hidden = decoder.reset_state(batch_size=target.shape[0])
+
+        dec_input = tf.expand_dims([prepare_captions.tokenizer.word_index['start_cap']] * target.shape[0], 1)
+
+        with tf.GradientTape() as tape:
+            features = encoder(img_tensor)
+
+            for i in range(1, target.shape[1]):
+                # passing the features through the decoder
+                predictions, hidden, _ = decoder(dec_input, features, hidden)
+
+                loss += loss_function(target[:, i], predictions)
+
+                # using teacher forcing
+                dec_input = tf.expand_dims(target[:, i], 1)
+
+        total_loss = (loss / int(target.shape[1]))
+
+        trainable_variables = encoder.trainable_variables + decoder.trainable_variables
+
+        gradients = tape.gradient(loss, trainable_variables)
+
+        optimizer.apply_gradients(zip(gradients, trainable_variables))
+
+        return loss, total_loss
+
+
+
+    start_epoch = 0
+    EPOCHS = 20
+
+    for epoch in range(start_epoch, EPOCHS):
+        start = time.time()
+        total_loss = 0
+
+        for (batch, (img_tensor, target)) in enumerate(train_dataset):
+            batch_loss, t_loss = train_step(img_tensor, target)
+            total_loss += t_loss
+
+            if batch % 100 == 0:
+                average_batch_loss = batch_loss / int(target.shape[1])
+                print(f'Epoch {epoch + 1} Batch {batch} Loss {average_batch_loss:.4f}')
+        # storing the epoch end loss value to plot later
+        loss_plot.append(total_loss / num_steps)
+
+        print(f'Epoch {epoch + 1} Loss {total_loss / num_steps:.6f}')
+        print(f'Time taken for 1 epoch {time.time() - start:.2f} sec\n')
+
+
+    os.system("find /home/student/dvir/ML2_Project/Flicker8k_Dataset -name '*.npy' -delete")
     print('hi')
