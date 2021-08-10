@@ -151,8 +151,16 @@ class prepare_captions():
 
 
 if __name__ == "__main__":
+    # preprocess images and captions and split into train and test sets
     img_to_captions_dict, train_imgs, test_imgs = prepare_images_features()
     prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
     X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
     os.system("find /home/student/dvir/ML2_Project/Flicker8k_Dataset -name '*.npy' -delete")
+
+    # create dataset
+    train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
+    train_dataset = train_dataset.map(lambda x, y: (tf.numpy_function(np.load, x, tf.float32), y), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    train_dataset.batch(BATCH_SIZE)
+    train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+
     print('hi')
