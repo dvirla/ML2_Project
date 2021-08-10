@@ -4,9 +4,10 @@ from collections import defaultdict
 import random
 import numpy as np
 from tqdm import tqdm
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 import re
+import os
 
 BATCH_SIZE = 60
 BUFFER_SIZE = 1000
@@ -138,12 +139,12 @@ class prepare_captions():
 
         for img in self.train_imgs:
             for padded_idx in self.padded_captions_idxs_dict[img]:
-                X_train.append(images_dir + img + ".npy")
+                X_train.append(images_dir + img[:-4] + ".npy")
                 y_train.append(padded_idx)
 
         for img in self.test_imgs:
             for padded_idx in self.padded_captions_idxs_dict[img]:
-                X_test.append(img)
+                X_test.append(images_dir + img[:-4] + ".npy")
                 y_test.append(padded_idx)
 
         return X_train, y_train, X_test, y_test
@@ -153,3 +154,5 @@ if __name__ == "__main__":
     img_to_captions_dict, train_imgs, test_imgs = prepare_images_features()
     prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
     X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
+    os.system("find /home/student/dvir/ML2_Project/Flicker8k_Dataset -name '*.npy' -delete")
+    print('hi')
