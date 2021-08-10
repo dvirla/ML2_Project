@@ -6,6 +6,7 @@ import numpy as np
 from tqdm import tqdm
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
+import re
 
 BATCH_SIZE = 60
 BUFFER_SIZE = 1000
@@ -79,7 +80,8 @@ def prepare_images_features():
             print(f'{img} in {path}')
             continue
 
-    return train_images, test_images
+    return img_to_captions_dict, train_images, test_images
+
 
 class prepare_captions():
     def __init__(self, img_to_captions_dict, train_imgs, test_imgs):
@@ -97,6 +99,7 @@ class prepare_captions():
         # functions
         self.captions_preprocess()
         self.tokenizer_fit()
+        self.caption_padding()
 
     def captions_preprocess(self):
         for img, caption_list in self.img_to_captions_dict.items():
@@ -105,7 +108,8 @@ class prepare_captions():
                 # allow only word and numbers
                 processed_caption = re.sub(r"[^a-zA-Z0-9]+", ' ', caption.lower())
                 #  allow only words of more than one letter
-                processed_caption_list = [word for word in processed_caption.split(' ') if ((len(word) > 1) and (word.isalpha()))]
+                processed_caption_list = [word for word in processed_caption.split(' ') if
+                                          ((len(word) > 1) and (word.isalpha()))]
                 #  add beginning and ending of caption tokens
                 processed_caption_list = ['start_cap'] + processed_caption_list + ['end_cap']
                 self.max_caption_len = max([self.max_caption_len, len(processed_caption_list)])
@@ -122,10 +126,11 @@ class prepare_captions():
         for img, caption_list in self.processed_img_to_captions_dict.items():
             for caption in caption_list:
                 caption_idxs = self.tokenizer.texts_to_sequences([caption])[0]
-                padded_idxs = pad_sequences([caption_idxs], maxlen=self.max_caption_len, padding='post')[0] #todo: maybe value of the padding from zero?
+                padded_idxs = pad_sequences([caption_idxs], maxlen=self.max_caption_len, padding='post')[
+                    0]  # todo: maybe value of the padding from zero?
                 self.padded_captions_idxs_dict[img].append(padded_idxs)
 
-    def split_dic_to_train_set(self, directory):
+    def split_dic_to_train_set(self):
         X_train = []
         y_train = []
         X_test = []
@@ -143,5 +148,8 @@ class prepare_captions():
 
         return X_train, y_train, X_test, y_test
 
+
 if __name__ == "__main__":
-    prepare_images_features()
+    img_to_captions_dict, train_imgs, test_imgs = prepare_images_features()
+    prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
+    X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
