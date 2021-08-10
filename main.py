@@ -5,7 +5,7 @@ import random
 import numpy as np
 from tqdm import tqdm
 
-BATCH_SIZE = 64
+BATCH_SIZE = 60
 BUFFER_SIZE = 1000
 
 random.seed = 42  # Fixing randomness
@@ -61,17 +61,24 @@ def prepare_images_features():
         load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(BATCH_SIZE)
 
     # Extracting features for each batch, reshaping
-    # TODO:
-    #  1. understand reshaping
-    #  2. check number of .npy files created
+    counter = 0
     for img, path in tqdm(image_dataset):
-        batch_features = image_features_extract_model(img)
-        batch_features = tf.reshape(batch_features,
-                                    (batch_features.shape[0], -1, batch_features.shape[3]))
+        try:
+            batch_features = image_features_extract_model(img)
+            batch_features = tf.reshape(batch_features,
+                                        (batch_features.shape[0], -1, batch_features.shape[3]))
 
-        for bf, p in zip(batch_features, path):
-            path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
-            np.save(path_of_feature, bf.numpy())
+            for bf, p in zip(batch_features, path):
+                path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
+                np.save(path_of_feature, bf.numpy())
+
+        except:
+            counter += 1
+            print(f'{img} in {path}')
+            continue
+
+    return train_images, test_images
+
 
 
 if __name__ == "__main__":
