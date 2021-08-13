@@ -9,13 +9,16 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 import re
 import os
 import time
-
-BATCH_SIZE = 64
-BUFFER_SIZE = 1000
+from FeatureExtractor import featureextractor
+from ImagesFeatures import imagefeatures
 
 random.seed = 42  # Fixing randomness
-images_dir = "Flicker8k_Dataset/"
+images_dir = "/home/student/dvir/ML2_Project/Flicker8k_Dataset/"
 tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
+image_height = 299
+image_width = 299
+BATCH_SIZE = 64
+BUFFER_SIZE = 1000
 
 
 def parse_images_captions_file(path):
@@ -34,9 +37,12 @@ def parse_images_captions_file(path):
 
 
 def load_image(image_path):
+    """
+    :return: image after preprocess of pre-trained inception_v3 and the path including .jpg
+    """
     img = tf.io.read_file(image_path)
     img = tf.image.decode_jpeg(img, channels=3)
-    img = tf.image.resize(img, (299, 299))
+    img = tf.image.resize(img, (299, 299))  # required for pre-trained model
     img = tf.keras.applications.inception_v3.preprocess_input(img)
     return img, image_path
 
@@ -45,11 +51,7 @@ def prepare_images_features():
     img_to_captions_dict = parse_images_captions_file(tokens_dir)
     # Splitting the image list into train, test sets
     images_list = list(img_to_captions_dict.keys())
-    # random.shuffle(images_list)
-    for p in images_list:
-        if len(p.split('.')) > 2:
-            print(p)
-            exit(0)
+    random.shuffle(images_list)
     train_images, test_images = images_list[:6000], images_list[6000:]
 
     # Prepare model for feature extraction
@@ -59,30 +61,29 @@ def prepare_images_features():
     hidden_layer = image_model.layers[-1].output  # Truncating classifier's layer
     image_features_extract_model = tf.keras.Model(new_input, hidden_layer)
 
-    # Mapping images to their paths
     training_image_paths = [f'{images_dir}{name}' for name in train_images]
-    image_dataset = tf.data.Dataset.from_tensor_slices(training_image_paths)
+    unique_set = sorted(set(training_image_paths))
+
+    image_dataset = tf.data.Dataset.from_tensor_slices(unique_set)
     image_dataset = image_dataset.map(
-        load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(BATCH_SIZE)
+        load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(16)  # Mapping images to their paths
 
     # Extracting features for each batch, reshaping
-    # counter = 0
-    # for img, path in tqdm(image_dataset):
-    #     try:
-    #         batch_features = image_features_extract_model(img)
-    #         batch_features = tf.reshape(batch_features,
-    #                                     (batch_features.shape[0], -1, batch_features.shape[3]))
-    #
-    #         for bf, p in zip(batch_features, path):
-    #             path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
-    #             np.save(path_of_feature, bf.numpy())
-    #
-    #     except:
-    #         counter += 1
-    #         print(f'{img} in {path}')
-    #         continue
+    for img, path in tqdm(image_dataset):
+        try:
+            batch_features = image_features_extract_model(img)
+            batch_features = tf.reshape(batch_features,
+                                        (batch_features.shape[0], -1, batch_features.shape[3]))
+
+            for bf, p in zip(batch_features, path):
+                path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
+                np.save(path_of_feature, bf.numpy())
+
+        except:
+            continue
 
     return img_to_captions_dict, train_images, test_images
+    pass
 
 
 class prepare_captions():
@@ -158,7 +159,7 @@ class AttentionModel(tf.keras.Model):
         self.layer2 = tf.keras.layers.Dense(dim)
         self.pred_layer = tf.keras.layers.Dense(1)
 
-
+    @tf.function
     def call(self, features, hidden):
         # features(CNN_encoder output) shape == (batch_size, 64, embedding_dim)
         # hidden shape == (batch_size, hidden_size)
@@ -190,6 +191,7 @@ class Encoder(tf.keras.Model):
         # shape after fc == (batch_size, 64, embedding_dim)
         self.layer1 = tf.keras.layers.Dense(embedding_dim)
 
+    @tf.function
     def call(self, x):
         x = self.layer1(x)
         x = tf.nn.relu(x)
@@ -208,6 +210,7 @@ class RNN_Decoder(tf.keras.Model):
         self.layer2 = tf.keras.layers.Dense(vocab_size)
         self.attention = AttentionModel(self.dim)
 
+    @tf.function
     def call(self, x, features, hidden):
         # defining attention as a separate model
         print('x: ', x)
@@ -238,6 +241,52 @@ class RNN_Decoder(tf.keras.Model):
         return tf.zeros((batch_size, self.dim))
 
 
+def map_dataset_wrapper(img_name, cap):
+    img_tensor = np.load(img_name.decode('utf-8'))
+    return img_tensor, cap
+
+
+def loss_function(real, pred):
+    mask = tf.math.logical_not(tf.math.equal(real, 0))
+    loss_ = loss_object(real, pred)
+
+    mask = tf.cast(mask, dtype=loss_.dtype)
+    loss_ *= mask
+
+    return tf.reduce_mean(loss_)
+
+
+@tf.function
+def train_step(img_tensor, target):
+    loss = 0
+
+    # initializing the hidden state for each batch
+    # because the captions are not related from image to image
+    hidden = decoder.reset_state(batch_size=target.shape[0])
+
+    dec_input = tf.expand_dims([prepare_captions.tokenizer.word_index['startcap']] * target.shape[0], 1)
+
+    with tf.GradientTape() as tape:
+        features = encoder(img_tensor)
+
+        for i in range(1, target.shape[1]):
+            # passing the features through the decoder
+            predictions, hidden, _ = decoder(dec_input, features, hidden)
+
+            loss += loss_function(target[:, i], predictions)
+
+            # using teacher forcing
+            dec_input = tf.expand_dims(target[:, i], 1)
+
+    total_loss = (loss / int(target.shape[1]))
+
+    trainable_variables = encoder.trainable_variables + decoder.trainable_variables
+
+    gradients = tape.gradient(loss, trainable_variables)
+
+    optimizer.apply_gradients(zip(gradients, trainable_variables))
+
+    return loss, total_loss
 
 
 if __name__ == "__main__":
@@ -246,20 +295,16 @@ if __name__ == "__main__":
     prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
     X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
 
-    #
-    # def wrapper_map(image_path, caption):
-    #     image_tensor = np.load(image_path.decode('utf-8'))
-    #     return image_tensor, caption
-
-    # create dataset
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-    train_dataset = train_dataset.map(lambda x, y: (tf.numpy_function(np.load, [x], [tf.float32]), y), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    train_dataset = train_dataset.map(
+        lambda x, y: tf.numpy_function(map_dataset_wrapper, [x, y], [tf.float32, tf.int32]),
+        num_parallel_calls=tf.data.experimental.AUTOTUNE)
     train_dataset = train_dataset.batch(BATCH_SIZE)
     train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     # training
     embedding_dim = 256
-    units = 512
+    dims = 512
     vocab_size = prepare_captions.vocab_size
     num_steps = len(X_train) // BATCH_SIZE
     # Shape of the vector extracted from InceptionV3 is (64, 2048)
@@ -268,58 +313,13 @@ if __name__ == "__main__":
     attention_features_shape = 64
 
     encoder = Encoder(embedding_dim)
-    decoder = RNN_Decoder(embedding_dim, units, vocab_size)
+    decoder = RNN_Decoder(embedding_dim, dims, vocab_size)
 
     optimizer = tf.keras.optimizers.Adam()
     loss_object = tf.keras.losses.SparseCategoricalCrossentropy(
         from_logits=True, reduction='none')
 
-
-    def loss_function(real, pred):
-        mask = tf.math.logical_not(tf.math.equal(real, 0))
-        loss_ = loss_object(real, pred)
-
-        mask = tf.cast(mask, dtype=loss_.dtype)
-        loss_ *= mask
-
-        return tf.reduce_mean(loss_)
-
-
     loss_plot = []
-
-    @tf.function
-    def train_step(img_tensor, target):
-        loss = 0
-
-        # initializing the hidden state for each batch
-        # because the captions are not related from image to image
-        hidden = decoder.reset_state(batch_size=target.shape[0])
-
-        dec_input = tf.expand_dims([prepare_captions.tokenizer.word_index['startcap']] * target.shape[0], 1)
-
-        with tf.GradientTape() as tape:
-            features = encoder(img_tensor)
-
-            for i in range(1, target.shape[1]):
-                # passing the features through the decoder
-                predictions, hidden, _ = decoder(dec_input, features, hidden)
-
-                loss += loss_function(target[:, i], predictions)
-
-                # using teacher forcing
-                dec_input = tf.expand_dims(target[:, i], 1)
-
-        total_loss = (loss / int(target.shape[1]))
-
-        trainable_variables = encoder.trainable_variables + decoder.trainable_variables
-
-        gradients = tape.gradient(loss, trainable_variables)
-
-        optimizer.apply_gradients(zip(gradients, trainable_variables))
-
-        return loss, total_loss
-
-
 
     start_epoch = 0
     EPOCHS = 20
@@ -341,6 +341,4 @@ if __name__ == "__main__":
         print(f'Epoch {epoch + 1} Loss {total_loss / num_steps:.6f}')
         print(f'Time taken for 1 epoch {time.time() - start:.2f} sec\n')
 
-
     os.system("find /home/student/dvir/ML2_Project/Flicker8k_Dataset -name '*.npy' -delete")
-    print('hi')
