@@ -10,7 +10,7 @@ import re
 import os
 import time
 
-BATCH_SIZE = 60
+BATCH_SIZE = 64
 BUFFER_SIZE = 1000
 
 random.seed = 42  # Fixing randomness
@@ -45,7 +45,7 @@ def prepare_images_features():
     img_to_captions_dict = parse_images_captions_file(tokens_dir)
     # Splitting the image list into train, test sets
     images_list = list(img_to_captions_dict.keys())
-    random.shuffle(images_list)
+    # random.shuffle(images_list)
     for p in images_list:
         if len(p.split('.')) > 2:
             print(p)
@@ -66,21 +66,21 @@ def prepare_images_features():
         load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(BATCH_SIZE)
 
     # Extracting features for each batch, reshaping
-    counter = 0
-    for img, path in tqdm(image_dataset):
-        try:
-            batch_features = image_features_extract_model(img)
-            batch_features = tf.reshape(batch_features,
-                                        (batch_features.shape[0], -1, batch_features.shape[3]))
-
-            for bf, p in zip(batch_features, path):
-                path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
-                np.save(path_of_feature, bf.numpy())
-
-        except:
-            counter += 1
-            print(f'{img} in {path}')
-            continue
+    # counter = 0
+    # for img, path in tqdm(image_dataset):
+    #     try:
+    #         batch_features = image_features_extract_model(img)
+    #         batch_features = tf.reshape(batch_features,
+    #                                     (batch_features.shape[0], -1, batch_features.shape[3]))
+    #
+    #         for bf, p in zip(batch_features, path):
+    #             path_of_feature = (p.numpy().decode("utf-8")).split('.')[0]
+    #             np.save(path_of_feature, bf.numpy())
+    #
+    #     except:
+    #         counter += 1
+    #         print(f'{img} in {path}')
+    #         continue
 
     return img_to_captions_dict, train_images, test_images
 
@@ -113,7 +113,7 @@ class prepare_captions():
                 processed_caption_list = [word for word in processed_caption.split(' ') if
                                           ((len(word) > 1) and (word.isalpha()))]
                 #  add beginning and ending of caption tokens
-                processed_caption_list = ['start_cap'] + processed_caption_list + ['end_cap']
+                processed_caption_list = ['startcap'] + processed_caption_list + ['endcap']
                 self.max_caption_len = max([self.max_caption_len, len(processed_caption_list)])
                 processed_caption = ' '.join(processed_caption_list)
                 self.all_captions.append(processed_caption)
@@ -158,8 +158,8 @@ class AttentionModel(tf.keras.Model):
         self.layer2 = tf.keras.layers.Dense(dim)
         self.pred_layer = tf.keras.layers.Dense(1)
 
-    @tf.function
-    def call(self, hidden, features):
+
+    def call(self, features, hidden):
         # features(CNN_encoder output) shape == (batch_size, 64, embedding_dim)
         # hidden shape == (batch_size, hidden_size)
         # hidden_with_time_axis shape == (batch_size, 1, hidden_size)
@@ -190,7 +190,6 @@ class Encoder(tf.keras.Model):
         # shape after fc == (batch_size, 64, embedding_dim)
         self.layer1 = tf.keras.layers.Dense(embedding_dim)
 
-    @tf.function
     def call(self, x):
         x = self.layer1(x)
         x = tf.nn.relu(x)
@@ -209,19 +208,19 @@ class RNN_Decoder(tf.keras.Model):
         self.layer2 = tf.keras.layers.Dense(vocab_size)
         self.attention = AttentionModel(self.dim)
 
-    @tf.function
     def call(self, x, features, hidden):
         # defining attention as a separate model
+        print('x: ', x)
         context_vector, attention_weights = self.attention(features, hidden)
-
+        print('context vec: ', context_vector)
         # x shape after passing through embedding == (batch_size, 1, embedding_dim)
         x = self.embedding(x)
-
+        print('x after embedding: ', x)
         # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
         x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
 
         # passing the concatenated vector to the LSTM
-        h_seq, state = self.lstm(x)
+        h_seq, state, final_carry_state = self.lstm(x)
 
         # shape == (batch_size, max_length, hidden_size)
         x = self.layer1(h_seq)
@@ -236,7 +235,9 @@ class RNN_Decoder(tf.keras.Model):
         return x, state, attention_weights
 
     def reset_state(self, batch_size):
-        return tf.zeros((batch_size, self.units))
+        return tf.zeros((batch_size, self.dim))
+
+
 
 
 if __name__ == "__main__":
@@ -245,17 +246,22 @@ if __name__ == "__main__":
     prepare_captions = prepare_captions(img_to_captions_dict, train_imgs, test_imgs)
     X_train, y_train, X_test, y_test = prepare_captions.split_dic_to_train_set()
 
+    #
+    # def wrapper_map(image_path, caption):
+    #     image_tensor = np.load(image_path.decode('utf-8'))
+    #     return image_tensor, caption
+
     # create dataset
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-    train_dataset = train_dataset.map(lambda x, y: (tf.numpy_function(np.load, x, tf.float32), y), num_parallel_calls=tf.data.experimental.AUTOTUNE)
-    train_dataset.batch(BATCH_SIZE)
+    train_dataset = train_dataset.map(lambda x, y: (tf.numpy_function(np.load, [x], [tf.float32]), y), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    train_dataset = train_dataset.batch(BATCH_SIZE)
     train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
     # training
     embedding_dim = 256
     units = 512
     vocab_size = prepare_captions.vocab_size
-    num_steps = len(X_train) / BATCH_SIZE
+    num_steps = len(X_train) // BATCH_SIZE
     # Shape of the vector extracted from InceptionV3 is (64, 2048)
     # These two variables represent that vector shape
     features_shape = 2048
@@ -281,7 +287,7 @@ if __name__ == "__main__":
 
     loss_plot = []
 
-
+    @tf.function
     def train_step(img_tensor, target):
         loss = 0
 
@@ -289,7 +295,7 @@ if __name__ == "__main__":
         # because the captions are not related from image to image
         hidden = decoder.reset_state(batch_size=target.shape[0])
 
-        dec_input = tf.expand_dims([prepare_captions.tokenizer.word_index['start_cap']] * target.shape[0], 1)
+        dec_input = tf.expand_dims([prepare_captions.tokenizer.word_index['startcap']] * target.shape[0], 1)
 
         with tf.GradientTape() as tape:
             features = encoder(img_tensor)
@@ -327,7 +333,7 @@ if __name__ == "__main__":
             total_loss += t_loss
 
             if batch % 100 == 0:
-                average_batch_loss = batch_loss / int(target.shape[1])
+                average_batch_loss = batch_loss / int(target.shape[0])
                 print(f'Epoch {epoch + 1} Batch {batch} Loss {average_batch_loss:.4f}')
         # storing the epoch end loss value to plot later
         loss_plot.append(total_loss / num_steps)
