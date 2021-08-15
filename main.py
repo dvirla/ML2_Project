@@ -9,8 +9,6 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 import re
 import os
 import time
-from FeatureExtractor import featureextractor
-from ImagesFeatures import imagefeatures
 
 random.seed = 42  # Fixing randomness
 images_dir = "/home/student/dvir/ML2_Project/Flicker8k_Dataset/"
