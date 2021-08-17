@@ -5,7 +5,7 @@ from collections import defaultdict
 
 
 class captionprocessor():
-    def __init__(self, img_to_captions_dict, train_imgs, test_imgs):
+    def __init__(self, img_to_captions_dict, train_imgs=None, test_imgs=None):
         # general variables
         self.img_to_captions_dict = img_to_captions_dict
         self.processed_img_to_captions_dict = defaultdict(list)
