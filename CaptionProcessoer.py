@@ -47,24 +47,5 @@ class captionprocessor():
         for img, caption_list in self.processed_img_to_captions_dict.items():
             for caption in caption_list:
                 caption_idxs = self.tokenizer.texts_to_sequences([caption])[0]
-                padded_idxs = pad_sequences([caption_idxs], maxlen=self.max_caption_len, padding='post')[
-                    0]  # todo: maybe value of the padding from zero?
+                padded_idxs = pad_sequences([caption_idxs], maxlen=self.max_caption_len, padding='post')[0]
                 self.padded_captions_idxs_dict[img].append(padded_idxs)
-
-    def split_dic_to_train_set(self):
-        X_train = []
-        y_train = []
-        X_test = []
-        y_test = []
-
-        for img in self.train_imgs:
-            for padded_idx in self.padded_captions_idxs_dict[img]:
-                X_train.append(img)
-                y_train.append(padded_idx)
-
-        for img in self.test_imgs:
-            for padded_idx in self.padded_captions_idxs_dict[img]:
-                X_test.append(img)
-                y_test.append(padded_idx)
-
-        return X_train, y_train, X_test, y_test

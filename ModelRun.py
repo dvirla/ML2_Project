@@ -69,8 +69,6 @@ class modelrun:
                 X.append(img)
                 y.append(padded_vec)
 
-        # TODO: remove X_train, y_train, X_test, y_test = self.caption_processor.split_dic_to_train_set()
-
         # Creating train dataset by mapping image feature to its caption
         dataset = tf.data.Dataset.from_tensor_slices((X, y))
         dataset = dataset.map(
@@ -101,11 +99,8 @@ class modelrun:
         train_dataset = dataset.skip(2000)
         train_dataset = train_dataset.batch(self.batch_size)
         train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
-        # Training
-        # num_steps = len(X_train) // BATCH_SIZE
-        # TODO: check if len(train_dataset) == 6000
-        # num_steps = 6000 // self.batch_size
 
+        # Training
         train_loss_results = []
         train_accuracy_results = []
         validation_avg_f_measure_history = []
@@ -135,7 +130,6 @@ class modelrun:
             train_loss_results.append(epoch_loss_avg.result())
             train_accuracy_results.append(np.mean(np.array(f_per_batch)))
 
-            # print(f'Epoch {epoch + 1} Loss {total_loss / num_steps:.6f}')
             print(f'Time taken for 1 epoch {time.time() - start:.2f} sec\n')
 
             self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_{epoch}')
@@ -222,7 +216,7 @@ class modelrun:
 
             for i in range(1, target.shape[1]):
                 # passing the features through the decoder
-                predictions, hidden, _ = self.decoder(dec_input, features, hidden)
+                predictions, hidden = self.decoder(dec_input, features, hidden)
                 predicted_id = tf.random.categorical(predictions, 1).numpy()
                 res = np.concatenate((res, predicted_id), axis=1)
                 # using teacher forcing
@@ -248,7 +242,7 @@ class modelrun:
         for i in range(self.caption_processor.max_caption_len):
             predictions, hidden, attention_weights = self.decoder(dec_input, features, hidden)
 
-            predicted_id = tf.random.categorical(predictions, 1)[0][0].numpy()  # TODO: check argmax instead
+            predicted_id = tf.random.categorical(predictions, 1)[0][0].numpy()
 
             if self.caption_processor.tokenizer.index_word[predicted_id] == 'endcap':
                 return " ".join(caption), caption_vec
@@ -259,18 +253,3 @@ class modelrun:
             dec_input = tf.expand_dims([predicted_id], 0)
 
         return " ".join(caption), caption_vec
-
-    # @tf.function
-    # def check_earlystop(self, loss_history, patience, min_delta):
-    #     if len(loss_history) < patience:
-    #         return True
-    #     counter = 0
-    #     for i in range(1, len(loss_history) + 1):
-    #         curr_loss = loss_history[i]
-    #         last_loss = loss_history[i-1]
-    #         if curr_loss - last_loss < min_delta:
-    #             counter += 1
-    #         else:
-    #             counter = 0
-    #         if counter >= patience:
-    #             return True

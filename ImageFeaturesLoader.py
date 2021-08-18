@@ -15,12 +15,9 @@ class imagefeaturesloader:
         self.images_features_dict = {}  # Place holder
         self.feature_extractor = feature_extractor
 
-
     def load_images(self):
         # Splitting the image list into train, test sets
         random.shuffle(self.images_list)
-        # TODO: remove
-        # train_images, test_images = self.images_list[:6000], self.images_list[6000:]
 
         images_paths = [f'{name}' for name in self.images_list]
         unique_set = sorted(set(images_paths))
@@ -31,10 +28,6 @@ class imagefeaturesloader:
             16)  # Mapping images to their paths
 
         self.images_features_dict = self.create_features()
-
-        pass
-        # TODO: remove
-        # return train_images, test_images
 
     def create_features(self):
         """

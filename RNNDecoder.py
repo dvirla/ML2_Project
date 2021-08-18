@@ -10,7 +10,6 @@ class rnndecoder(tf.keras.Model):
         # TODO: try with bidirectional
         self.lstm = tf.keras.layers.LSTM(self.dim, return_sequences=True, return_state=True)
         self.layer1 = tf.keras.layers.Dense(self.dim)
-        # TODO: check option to ommit fc1
         self.layer2 = tf.keras.layers.Dense(vocab_size)
         self.attention = attentionmodel(self.dim)
 
@@ -35,8 +34,7 @@ class rnndecoder(tf.keras.Model):
         # output shape == (batch_size * max_length, vocab)
         x = self.layer2(x)
 
-        # TODO: check option to remove attention_weights
-        return x, state, attention_weights
+        return x, state
 
     def reset_state(self, batch_size):
         return tf.zeros((batch_size, self.dim))

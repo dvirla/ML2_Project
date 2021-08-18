@@ -27,12 +27,3 @@ if __name__ == "__main__":
 
     model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.train()
-    # embedding_dim = 300
-    # dims = 512
-    # vocab_size = caption_processor.vocab_size  # 8425
-    # # num_steps = len(X_train) // BATCH_SIZE
-    # # TODO: check if len(train_dataset) == 6000
-    # num_steps = 6000 // self.batch_size
-    # # Shape feature vectors == (64, 2048)
-    # features_shape = 2048
-    # attention_features_shape = 64
