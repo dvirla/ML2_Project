@@ -6,7 +6,7 @@ from ModelRun import modelrun
 random.seed = 42  # Fixing randomness
 images_dir = "/home/student/dvir/ML2_Project/Flicker8k_Dataset/"
 tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
-train_dataset_path = 'train_dataset'
+dataset_path = 'dataset'
 image_height = 299
 image_width = 299
 batch_size = 64
@@ -18,14 +18,14 @@ if __name__ == "__main__":
     params_dict['images_dir'] = images_dir
     params_dict['tokens_dir'] = tokens_dir
     params_dict['batch_size'] = batch_size
-    params_dict['train_dataset_path'] = train_dataset_path
+    params_dict['dataset_path'] = dataset_path
     params_dict['embedding_dim'] = 300
     params_dict['dims'] = 512
     # Shape feature vectors == (64, 2048)
     params_dict['features_shape'] = 2048
     params_dict['attention_features_shape'] = 64
 
-    model_runner = modelrun(params_dict, feature_extractor)
+    model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.train()
     # embedding_dim = 300
     # dims = 512

@@ -30,7 +30,7 @@ class captionprocessor():
                 processed_caption = re.sub(r"[^a-zA-Z0-9]+", ' ', caption.lower())
                 #  allow only words of more than one letter
                 processed_caption_list = [word for word in processed_caption.split(' ') if
-                                          ((len(word) > 1) and (word.isalpha()))]
+                                          ((len(word) > 1) and (word.isalpha()))]  # TODO: check without this removal
                 #  add beginning and ending of caption tokens
                 processed_caption_list = ['startcap'] + processed_caption_list + ['endcap']
                 self.max_caption_len = max([self.max_caption_len, len(processed_caption_list)])
