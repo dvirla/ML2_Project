@@ -81,7 +81,7 @@ class modelrun:
 
         return dataset
 
-    def train(self, epochs=20, patience=3, min_delta=0.05):
+    def train(self, epochs=20, patience=5, min_delta=0.01):
         # Loading saved dataset
         dataset = tf.data.experimental.load(
             self.dataset_path) if not self.load_images else self.prepare_dataset()
@@ -120,17 +120,21 @@ class modelrun:
                 epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
                 f_per_batch.append(text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
                                                         tf.ragged.constant(self.predict_per_batch(img_tensor,
-                                                                                                  target))).f_measure)
+                                                                                                  target))).f_measure.numpy())
 
                 if batch % 100 == 0:
-                    average_batch_loss = batch_loss / int(target.shape[0])
-                    print(f'Epoch {epoch + 1} Batch {batch} Loss {average_batch_loss:.4f}')
-
+                    print(f'finished batch number {batch} in epoch {epoch + 1}')
             # end epoch
             train_loss_results.append(epoch_loss_avg.result())
-            train_accuracy_results.append(np.mean(np.array(f_per_batch)))
+            f_per_batch = np.array(f_per_batch)
+            if f_per_batch[-2].shape != f_per_batch[-1].shape:
+                train_avg_f_per_epoch = sum([sum(x) for x in f_per_batch]) / (len(f_per_batch[-2]) * (f_per_batch.shape[0] - 1) + len(f_per_batch[-1]))
+            else:
+                train_avg_f_per_epoch = np.mean(np.array(f_per_batch))
+            print(f'Epoch: {epoch + 1}, train average f measure: {train_avg_f_per_epoch}')
+            train_accuracy_results.append(train_avg_f_per_epoch)
 
-            print(f'Time taken for 1 epoch {time.time() - start:.2f} sec\n')
+            print(f'Time taken for epoch {epoch + 1} is {time.time() - start:.2f} sec\n')
 
             self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_{epoch}')
             self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_{epoch}')
@@ -139,11 +143,17 @@ class modelrun:
             for (batch, (img_tensor, target)) in enumerate(val_dataset):
                 predictions = self.predict_per_batch(img_tensor, target)
                 result = text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
-                                              tf.ragged.constant(predictions)).f_measure
-                avg_f_measure = np.mean(result.f_measure.numpy())
-                validation_f_per_batch.append(avg_f_measure)
+                                              tf.ragged.constant(predictions)).f_measure.numpy()
+                # avg_f_measure = np.mean(result)
+                validation_f_per_batch.append(result)
 
-            validation_avg_f_measure_history.append(np.mean(np.array(validation_f_per_batch)))
+            val_avg_f_per_epoch = np.array(validation_f_per_batch)
+            if val_avg_f_per_epoch[-2].shape != val_avg_f_per_epoch[-1].shape:
+                val_avg_f_per_epoch = sum([sum(x) for x in val_avg_f_per_epoch]) / (len(val_avg_f_per_epoch[-2]) * (val_avg_f_per_epoch.shape[0] - 1) + len(val_avg_f_per_epoch[-1]))
+            else:
+                val_avg_f_per_epoch = np.mean(val_avg_f_per_epoch)
+            print(f'Epoch: {epoch + 1}, train average f measure: {val_avg_f_per_epoch}')
+            validation_avg_f_measure_history.append(val_avg_f_per_epoch)
             counter = 0
             for i in range(1, len(validation_avg_f_measure_history)):
                 if validation_avg_f_measure_history[i] - validation_avg_f_measure_history[i - 1] < min_delta:
@@ -156,12 +166,11 @@ class modelrun:
             if overfit[1]:
                 print("overfit")
                 break
-
         metrics_dict = {'train_loss': train_loss_results, 'train_acc': train_accuracy_results,
                         'val_acc': validation_avg_f_measure_history,
                         'final_epoch': overfit[0]}
 
-        with open('metrics_dict.pkl', 'rb') as f:
+        with open('metrics_dict.pkl', 'wb') as f:
             pickle.dump(metrics_dict, f)
 
     def loss_function(self, real, pred):
@@ -188,7 +197,7 @@ class modelrun:
 
             for i in range(1, target.shape[1]):
                 # passing the features through the decoder
-                predictions, hidden, _ = self.decoder(dec_input, features, hidden)
+                predictions, hidden = self.decoder(dec_input, features, hidden)
 
                 loss += self.loss_function(target[:, i], predictions)
 
@@ -210,7 +219,7 @@ class modelrun:
 
         dec_input = tf.expand_dims([self.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
 
-        res = np.empty((self.batch_size, 0), dtype=np.int32)
+        res = np.empty((target.shape[0], 0), dtype=np.int32)
         with tf.GradientTape() as tape:
             features = self.encoder(img_tensor)
 
@@ -240,7 +249,7 @@ class modelrun:
             features = self.encoder(img_tensor_val)
 
         for i in range(self.caption_processor.max_caption_len):
-            predictions, hidden, attention_weights = self.decoder(dec_input, features, hidden)
+            predictions, hidden = self.decoder(dec_input, features, hidden)
 
             predicted_id = tf.random.categorical(predictions, 1)[0][0].numpy()
 
