@@ -9,10 +9,11 @@ from DenseEnconder import denseenconder
 import tensorflow_text as text
 import numpy as np
 import pickle
+import os
 
 
 class modelrun:
-    def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None):
+    def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None, model_version=None):
         self.images_dir = params_dict['images_dir']
         self.tokens_dir = params_dict['tokens_dir']
         self.batch_size = params_dict['batch_size']
@@ -36,6 +37,8 @@ class modelrun:
         self.optimizer = optimizer if optimizer is not None else tf.keras.optimizers.Adam()
         self.loss_object = loss_object if loss_object is not None else tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction='none')
+        # if model_version is not None:
+
 
     def parse_images_captions_file(self, path):
         """
@@ -81,7 +84,7 @@ class modelrun:
 
         return dataset
 
-    def train(self, epochs=20, patience=5, min_delta=0.01):
+    def train(self, epochs=20, patience=5, min_delta=1e-3):
         # Loading saved dataset
         dataset = tf.data.experimental.load(
             self.dataset_path) if not self.load_images else self.prepare_dataset()
@@ -104,6 +107,7 @@ class modelrun:
         train_loss_results = []
         train_accuracy_results = []
         validation_avg_f_measure_history = []
+        validation_loss_history = []
         overfit = (0, False)
 
         for epoch in range(epochs):
@@ -117,10 +121,10 @@ class modelrun:
                 total_loss += t_loss
 
                 # Track progress
-                epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
+                epoch_loss_avg.update_state(t_loss)  # Add current batch loss
                 f_per_batch.append(text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
                                                         tf.ragged.constant(self.predict_per_batch(img_tensor,
-                                                                                                  target))).f_measure.numpy())
+                                                                                                  target)[0]), alpha=1).f_measure.numpy())
 
                 if batch % 100 == 0:
                     print(f'finished batch number {batch} in epoch {epoch + 1}')
@@ -136,27 +140,36 @@ class modelrun:
 
             print(f'Time taken for epoch {epoch + 1} is {time.time() - start:.2f} sec\n')
 
-            self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_{epoch}')
-            self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_{epoch}')
+            self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_{epoch}.ckpt')
+            self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_{epoch}.ckpt')
 
             validation_f_per_batch = []
+            validation_loss_per_batch = []
             for (batch, (img_tensor, target)) in enumerate(val_dataset):
-                predictions = self.predict_per_batch(img_tensor, target)
+                predictions, t_loss = self.predict_per_batch(img_tensor, target)
                 result = text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
-                                              tf.ragged.constant(predictions)).f_measure.numpy()
+                                              tf.ragged.constant(predictions), alpha=1).f_measure.numpy()
                 # avg_f_measure = np.mean(result)
                 validation_f_per_batch.append(result)
+                validation_loss_per_batch.append(t_loss)
 
             val_avg_f_per_epoch = np.array(validation_f_per_batch)
+            validation_loss_per_epoch = np.mean(np.array(validation_loss_per_batch))
+
             if val_avg_f_per_epoch[-2].shape != val_avg_f_per_epoch[-1].shape:
                 val_avg_f_per_epoch = sum([sum(x) for x in val_avg_f_per_epoch]) / (len(val_avg_f_per_epoch[-2]) * (val_avg_f_per_epoch.shape[0] - 1) + len(val_avg_f_per_epoch[-1]))
+                # validation_loss_per_epoch = sum([sum(x) for x in validation_loss_per_epoch]) / (len(validation_loss_per_epoch[-2]) * (validation_loss_per_epoch.shape[0] - 1) + len(validation_loss_per_epoch[-1]))
+
             else:
                 val_avg_f_per_epoch = np.mean(val_avg_f_per_epoch)
+                # validation_loss_per_epoch = np.mean(validation_loss_per_epoch)
+
             print(f'Epoch: {epoch + 1}, train average f measure: {val_avg_f_per_epoch}')
             validation_avg_f_measure_history.append(val_avg_f_per_epoch)
+            validation_loss_history.append(validation_loss_per_epoch)
             counter = 0
-            for i in range(1, len(validation_avg_f_measure_history)):
-                if validation_avg_f_measure_history[i] - validation_avg_f_measure_history[i - 1] < min_delta:
+            for i in range(1, len(validation_loss_history)):
+                if np.abs(validation_loss_history[i] - validation_loss_history[i - 1]) < min_delta:
                     counter += 1
                 else:
                     counter = 0
@@ -167,7 +180,7 @@ class modelrun:
                 print("overfit")
                 break
         metrics_dict = {'train_loss': train_loss_results, 'train_acc': train_accuracy_results,
-                        'val_acc': validation_avg_f_measure_history,
+                        'val_acc': validation_avg_f_measure_history, 'val_loss': validation_loss_history,
                         'final_epoch': overfit[0]}
 
         with open('metrics_dict.pkl', 'wb') as f:
@@ -220,18 +233,22 @@ class modelrun:
         dec_input = tf.expand_dims([self.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
 
         res = np.empty((target.shape[0], 0), dtype=np.int32)
+        loss = 0
         with tf.GradientTape() as tape:
             features = self.encoder(img_tensor)
 
             for i in range(1, target.shape[1]):
                 # passing the features through the decoder
                 predictions, hidden = self.decoder(dec_input, features, hidden)
+                loss += self.loss_function(target[:, i], predictions)
                 predicted_id = tf.random.categorical(predictions, 1).numpy()
                 res = np.concatenate((res, predicted_id), axis=1)
                 # using teacher forcing
                 dec_input = tf.expand_dims(target[:, i], 1)
 
-        return res
+        total_loss = (loss / int(target.shape[1]))
+
+        return res, total_loss
 
     def perdict_caption(self, image_path=None, features=None):
         hidden = self.decoder.reset_state(batch_size=1)
