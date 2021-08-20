@@ -13,7 +13,7 @@ import os
 
 
 class modelrun:
-    def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None, model_version=None):
+    def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None):
         self.images_dir = params_dict['images_dir']
         self.tokens_dir = params_dict['tokens_dir']
         self.batch_size = params_dict['batch_size']
@@ -38,7 +38,6 @@ class modelrun:
         self.loss_object = loss_object if loss_object is not None else tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction='none')
         # if model_version is not None:
-
 
     def parse_images_captions_file(self, path):
         """
@@ -124,7 +123,8 @@ class modelrun:
                 epoch_loss_avg.update_state(t_loss)  # Add current batch loss
                 f_per_batch.append(text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
                                                         tf.ragged.constant(self.predict_per_batch(img_tensor,
-                                                                                                  target)[0]), alpha=1).f_measure.numpy())
+                                                                                                  target)[0]),
+                                                        alpha=1).f_measure.numpy())
 
                 if batch % 100 == 0:
                     print(f'finished batch number {batch} in epoch {epoch + 1}')
@@ -132,7 +132,8 @@ class modelrun:
             train_loss_results.append(epoch_loss_avg.result())
             f_per_batch = np.array(f_per_batch)
             if f_per_batch[-2].shape != f_per_batch[-1].shape:
-                train_avg_f_per_epoch = sum([sum(x) for x in f_per_batch]) / (len(f_per_batch[-2]) * (f_per_batch.shape[0] - 1) + len(f_per_batch[-1]))
+                train_avg_f_per_epoch = sum([sum(x) for x in f_per_batch]) / (
+                            len(f_per_batch[-2]) * (f_per_batch.shape[0] - 1) + len(f_per_batch[-1]))
             else:
                 train_avg_f_per_epoch = np.mean(np.array(f_per_batch))
             print(f'Epoch: {epoch + 1}, train average f measure: {train_avg_f_per_epoch}')
@@ -157,7 +158,9 @@ class modelrun:
             validation_loss_per_epoch = np.mean(np.array(validation_loss_per_batch))
 
             if val_avg_f_per_epoch[-2].shape != val_avg_f_per_epoch[-1].shape:
-                val_avg_f_per_epoch = sum([sum(x) for x in val_avg_f_per_epoch]) / (len(val_avg_f_per_epoch[-2]) * (val_avg_f_per_epoch.shape[0] - 1) + len(val_avg_f_per_epoch[-1]))
+                val_avg_f_per_epoch = sum([sum(x) for x in val_avg_f_per_epoch]) / (
+                            len(val_avg_f_per_epoch[-2]) * (val_avg_f_per_epoch.shape[0] - 1) + len(
+                        val_avg_f_per_epoch[-1]))
                 # validation_loss_per_epoch = sum([sum(x) for x in validation_loss_per_epoch]) / (len(validation_loss_per_epoch[-2]) * (validation_loss_per_epoch.shape[0] - 1) + len(validation_loss_per_epoch[-1]))
 
             else:

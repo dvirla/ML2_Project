@@ -2,7 +2,8 @@ import tensorflow as tf
 from AttentionModel import attentionmodel
 
 
-class rnndecoder(tf.keras.Model):
+class rnndecoder(tf.keras.Mod', loss='mse' , metrics=['accuracy'])
+model.fit(X,Y,validation_split=0.2, epochs=1000 )el):
     def __init__(self, embedding_dim, dim, vocab_size):
         super(rnndecoder, self).__init__()
         self.dim = dim
