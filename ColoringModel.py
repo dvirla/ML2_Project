@@ -107,8 +107,8 @@ class coloringmodel:
     def train(self, optimizer='adam', loss='mse', metrics=['accuracy'], validation_split=0.2, epochs=1000):
         callback = tf.keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            min_delta=0.001,
-            patience=15,
+            min_delta=0.0001,
+            patience=30,
             verbose=0,
             mode="auto",
             baseline=None,
@@ -121,19 +121,18 @@ class coloringmodel:
                                  epochs=epochs,
                                  callbacks=[callback],
                                  batch_size=self.batch_size)
-        self.model.save('/home/student/dvir/ML2_Project/colorizing_model/model_history.pkl')
+        self.model.save('/home/student/dvir/ML2_Project/colorizing_model/trained_model')
         try:
-            with open('/home/student/dvir/ML2_Project/colorizing_model/trained_model', 'wb') as f:
+            with open('/home/student/dvir/ML2_Project/colorizing_model/model_history.pkl', 'wb') as f:
                 pickle.dump(history, f)
         except:
             pass
 
     def postprocess(self):
         color_me = []
-        for img in self.test_ds:
-            # img = img_to_array(load_img(test_path + imgName))
-            # img = resize(img, (256, 256))
-            color_me.append(img)
+        for batch in self.test_ds:
+            for img in batch:
+                color_me.append(img)
         color_me = np.array(color_me, dtype=float)
         color_me = rgb2lab(1.0 / 255 * color_me)[:, :, :, 0]
         color_me = color_me.reshape(color_me.shape + (1,))
