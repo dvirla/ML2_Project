@@ -73,6 +73,7 @@ class modelrun:
 
         # Creating train dataset by mapping image feature to its caption
         dataset = tf.data.Dataset.from_tensor_slices((X, y))
+        dataset = dataset.shuffle(1000)
         dataset = dataset.map(
             lambda x, y: tf.compat.v1.numpy_function(
                 lambda img, cap: (image_features_loader.images_features_dict[img.decode('utf-8')], cap), [x, y],

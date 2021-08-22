@@ -107,8 +107,8 @@ class coloringmodel:
     def train(self, optimizer='adam', loss='mse', metrics=['accuracy'], validation_split=0.2, epochs=1000):
         callback = tf.keras.callbacks.EarlyStopping(
             monitor="val_loss",
-            min_delta=0.0001,
-            patience=30,
+            min_delta=0.001,
+            patience=15,
             verbose=0,
             mode="auto",
             baseline=None,
