@@ -37,14 +37,10 @@ class coloringmodel:
         self.model = None
         self.create_train_dataset()
         self.define_model()
-        self.train()
-        self.postprocess()
+        # self.train()
+        # self.postprocess()
 
     def create_train_dataset(self):
-        # train = self.train_datagen.flow_from_directory(self.images_dir, target_size=(256, 256),
-        #                                                batch_size=self.batch_size,
-        #                                                class_mode=None)  # Resizing images to (256, 256)
-
         self.train_ds = tf.keras.preprocessing.image_dataset_from_directory(
             self.images_dir,
             validation_split=0.2,
@@ -104,7 +100,7 @@ class coloringmodel:
         decoder_output = UpSampling2D((2, 2))(decoder_output)
         self.model = Model(inputs=encoder_input, outputs=decoder_output)
 
-    def train(self, optimizer='adam', loss='mse', metrics=['accuracy'], validation_split=0.2, epochs=1000):
+    def train(self, optimizer='adam', loss='mse', metrics=['accuracy'], validation_split=0.2, epochs=1):
         callback = tf.keras.callbacks.EarlyStopping(
             monitor="val_loss",
             min_delta=0.001,
@@ -121,16 +117,16 @@ class coloringmodel:
                                  epochs=epochs,
                                  callbacks=[callback],
                                  batch_size=self.batch_size)
-        self.model.save('/home/student/dvir/ML2_Project/colorizing_model/trained_model')
-        try:
-            with open('/home/student/dvir/ML2_Project/colorizing_model/model_history.pkl', 'wb') as f:
-                pickle.dump(history, f)
-        except:
-            pass
+        # self.model.save('/home/student/dvir/ML2_Project/colorizing_model/trained_model')
+        # try:
+        #     with open('/home/student/dvir/ML2_Project/colorizing_model/model_history.pkl', 'wb') as f:
+        #         pickle.dump(history, f)
+        # except:
+        #     pass
 
     def postprocess(self):
         color_me = []
-        for batch in self.test_ds:
+        for batch in self.train:
             for img in batch:
                 color_me.append(img)
         color_me = np.array(color_me, dtype=float)
