@@ -3,7 +3,7 @@ import csv
 from collections import defaultdict
 import time
 from ImageFeaturesLoader import imagefeaturesloader
-from CaptionProcessoer import captionprocessor
+from CaptionProcessor import captionprocessor
 from RNNDecoder import rnndecoder
 from DenseEnconder import denseenconder
 import tensorflow_text as text
