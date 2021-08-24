@@ -11,10 +11,9 @@ import numpy as np
 import pickle
 import os
 
-
 class modelrun:
     def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None):
-        self.images_dir = params_dict['images_dir']
+        self.images_dirs = params_dict['images_dirs']
         self.tokens_dir = params_dict['tokens_dir']
         self.batch_size = params_dict['batch_size']
         self.dataset_path = params_dict['dataset_path']
@@ -26,7 +25,7 @@ class modelrun:
         self.attention_features_shape = params_dict['attention_features_shape']
 
         self.feature_extractor = feature_extractor
-        self.img_to_captions_dict = self.parse_images_captions_file(self.tokens_dir)
+        self.img_to_captions_dict = self.parse_images_captions_file()
         self.caption_processor = captionprocessor(
             self.img_to_captions_dict) if self.dataset_path is not None else None
         self.vocab_size = self.caption_processor.vocab_size if self.dataset_path is not None else None  # 8425
@@ -39,23 +38,23 @@ class modelrun:
             from_logits=True, reduction='none')
         # if model_version is not None:
 
-    def parse_images_captions_file(self, path):
+    def parse_images_captions_file(self):
         """
         Reading the image-captions file
         :return: a dictionary {image_name: list of captions}
         """
         img_to_captions_dict = defaultdict(list)
-        with open(path) as f:
+        with open(self.tokens_dir) as f:
             csvreader = csv.reader(f, delimiter='\t')
             for row in csvreader:
                 img_caption, caption = row
                 img = img_caption.split('#')[0]
-                img_to_captions_dict[f'{self.images_dir}{img}'].append(caption)
+                img_to_captions_dict[f'{img}'].append(caption)
         return img_to_captions_dict
 
     def prepare_dataset(self):
         # preprocess images and captions and split into train and test sets
-        image_features_loader = imagefeaturesloader(list(self.img_to_captions_dict.keys()), self.images_dir,
+        image_features_loader = imagefeaturesloader(list(self.img_to_captions_dict.keys()), self.images_dirs,
                                                     self.feature_extractor)
         image_features_loader.load_images()
 
@@ -67,16 +66,18 @@ class modelrun:
         y = []
 
         for img, padded_captions_matrix in self.caption_processor.padded_captions_idxs_dict.items():
-            for padded_vec in padded_captions_matrix:
-                X.append(img)
-                y.append(padded_vec)
+            for directory in self.images_dirs:
+                directory_images_list = os.listdir(directory)
+                if img in directory_images_list:
+                    for padded_vec in padded_captions_matrix:
+                        X.append(f'{directory}{img}')
+                        y.append(padded_vec)
 
         # Creating train dataset by mapping image feature to its caption
         dataset = tf.data.Dataset.from_tensor_slices((X, y))
-        dataset = dataset.shuffle(1000)
         dataset = dataset.map(
             lambda x, y: tf.compat.v1.numpy_function(
-                lambda img, cap: (image_features_loader.images_features_dict[img.decode('utf-8')], cap), [x, y],
+                lambda image, cap: (image_features_loader.images_features_dict[image.decode('utf-8')], cap), [x, y],
                 [tf.float32, tf.int32]),
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
@@ -89,17 +90,17 @@ class modelrun:
         dataset = tf.data.experimental.load(
             self.dataset_path) if not self.load_images else self.prepare_dataset()
 
-        test__val_dataset = dataset.take(2000)
-        test_dataset = test__val_dataset.take(1000)
-        val_dataset = test__val_dataset.skip(1000)
+        # test__val_dataset = dataset.take(2000)
+        # test_dataset = test__val_dataset.take(1000)
+        val_dataset = dataset.take(1000)
 
-        test_dataset = test_dataset.batch(self.batch_size)
-        test_dataset = test_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+        # test_dataset = test_dataset.batch(self.batch_size)
+        # test_dataset = test_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
         val_dataset = val_dataset.batch(self.batch_size)
         val_dataset = val_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
-        train_dataset = dataset.skip(2000)
+        train_dataset = dataset.skip(1000)
         train_dataset = train_dataset.batch(self.batch_size)
         train_dataset = train_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 

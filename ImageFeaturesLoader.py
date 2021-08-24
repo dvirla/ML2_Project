@@ -3,23 +3,28 @@ import random
 from tqdm import tqdm
 from collections import defaultdict
 import numpy as np
+import os
 
 random.seed = 42  # Fixing randomness
 
 
 class imagefeaturesloader:
-    def __init__(self, images_list, images_dir, feature_extractor):
+    def __init__(self, images_list, images_dirs, feature_extractor):
         self.images_list = images_list
-        self.images_dir = images_dir
+        self.images_dirs = images_dirs
         self.image_dataset = None  # Place holder
         self.images_features_dict = {}  # Place holder
         self.feature_extractor = feature_extractor
 
     def load_images(self):
         # Splitting the image list into train, test sets
-        random.shuffle(self.images_list)
-
-        images_paths = [f'{name}' for name in self.images_list]
+        # random.shuffle(self.images_list)
+        images_paths = []
+        images_set = set(os.listdir(self.images_dirs[0])).intersection(set(self.images_list))
+        for directory in self.images_dirs:
+            for img in images_set:
+                images_paths.append(f'{directory}{img}')
+            # images_paths += [f'{dir}{name}' for name in self.images_list]
         unique_set = sorted(set(images_paths))
 
         self.image_dataset = tf.data.Dataset.from_tensor_slices(unique_set)

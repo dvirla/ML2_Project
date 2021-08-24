@@ -30,10 +30,14 @@ class Colorizer:
         self.fit(200, model_path, history_path)
 
     def prepare_training_dataset(self):
-        for img in self.training_set[0]:
-            L_a_b = rgb2lab(img)
-            self.X.append(L_a_b[:, :, 0])
-            self.Y.append(L_a_b[:, :, 1:] / 128)
+        for i, batch in enumerate(self.training_set):
+            if i > 97:
+                break
+            print(f"batch: {i} out of {len(self.training_set)}")
+            for img in batch:
+                L_a_b = rgb2lab(img)
+                self.X.append(L_a_b[:, :, 0])
+                self.Y.append(L_a_b[:, :, 1:] / 128)
 
         self.X = np.array(self.X)
         self.Y = np.array(self.Y)
@@ -128,5 +132,6 @@ class Colorizer:
 if __name__ == '__main__':
     images_dir = "/home/student/dvir/ML2_Project/Images/"
     colorizer = Colorizer(images_dir)
-    colorizer.load_model(path='/home/student/dvir/ML2_Project/colorizing_model/trained_model')
+    # colorizer.load_model(path='/home/student/dvir/ML2_Project/colorizing_model/trained_model')
+    colorizer.setup('/home/student/dvir/ML2_Project/colorizing_model/trained_model/', '/home/student/dvir/ML2_Project/colorizing_model/')
     colorizer.colorize_image_directory('/home/student/dvir/ML2_Project/colorizing_test_imgs/', '/home/student/dvir/ML2_Project/painted_images_2/')
