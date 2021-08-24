@@ -122,7 +122,7 @@ class Colorizer:
         out = np.zeros((224, 224, 3))
         out[:, :, 0] = l
         out[:, :, 1:] = a_b
-        imsave(out_path + f"colorized_{image_path.split('/')[-1][:-4]}.png", lab2rgb(out))
+        imsave(out_path + f"{image_path.split('/')[-1][:-4]}.jpg", (lab2rgb(out)*255).astype(np.uint8))
 
     def colorize_image_directory(self, images_directory, out_directory):
         for filename in os.listdir(images_directory):
@@ -132,6 +132,6 @@ class Colorizer:
 if __name__ == '__main__':
     images_dir = "/home/student/dvir/ML2_Project/Images/"
     colorizer = Colorizer(images_dir)
-    # colorizer.load_model(path='/home/student/dvir/ML2_Project/colorizing_model/trained_model')
-    colorizer.setup('/home/student/dvir/ML2_Project/colorizing_model/trained_model/', '/home/student/dvir/ML2_Project/colorizing_model/')
-    colorizer.colorize_image_directory('/home/student/dvir/ML2_Project/colorizing_test_imgs/', '/home/student/dvir/ML2_Project/painted_images_2/')
+    colorizer.load_model(path='/home/student/dvir/ML2_Project/colorizing_model/trained_model')
+    # colorizer.setup('/home/student/dvir/ML2_Project/colorizing_model/trained_model/', '/home/student/dvir/ML2_Project/colorizing_model/')
+    colorizer.colorize_image_directory('/home/student/dvir/ML2_Project/Test_Images/', '/home/student/dvir/ML2_Project/Colorized_Images/Test_Images/')

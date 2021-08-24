@@ -5,6 +5,8 @@ from nltk.translate.bleu_score import sentence_bleu
 from ModelRun import modelrun
 from FeatureExtractor import featureextractor
 import random
+from tqdm import tqdm
+
 
 class Validator:
     def __init__(self, model, imgs_path, reference_path):
@@ -26,31 +28,42 @@ class Validator:
                 all_imgs_to_captions_dict[f'{img}'].append(caption)
 
         for img_file_name in os.listdir(self.imgs_path):
-            if img_file_name[:5] == 'grey_':
-                self.imgs_list.append(img_file_name)
-                self.imgs_to_caption_list_dict[img_file_name] = all_imgs_to_captions_dict[img_file_name[5:]]
-                continue
+            # if img_file_name[:5] == 'grey_':
+            #     self.imgs_list.append(img_file_name)
+            #     self.imgs_to_caption_list_dict[img_file_name] = all_imgs_to_captions_dict[img_file_name[:5]]
+            #     continue
             self.imgs_list.append(img_file_name)
             self.imgs_to_caption_list_dict[img_file_name] = all_imgs_to_captions_dict[img_file_name]
 
         return
 
     def bleu_on_set(self, prints=False):
-        bleu = 0
-        for img in self.imgs_list:
-            predicted_caption, _ = self.model.perdict_caption(self.imgs_path+img)
-            real_captions = self.imgs_to_caption_list_dict[img]
-            bleu_on_sentence = sentence_bleu(real_captions, predicted_caption)
-            if prints:
-                print('Predicted caption: ', predicted_caption)
-                print('Real captions:\n', real_captions)
-                print('Current Bleu: ', bleu_on_sentence)
-                print('****************************************')
-            bleu += bleu_on_sentence
-
-        bleu = bleu / len(self.imgs_list)
+        bleu = [0, 0, 0, 0]
+        counter = [0, 0, 0, 0]
+        with open('bleu_scores_regular_model_on_grey_images.txt', 'w') as f:
+            for img in tqdm(self.imgs_list):
+                predicted_caption, _ = self.model.perdict_caption(image_path=f'{self.imgs_path}{img}')
+                real_captions = self.imgs_to_caption_list_dict[img]
+                f.write(f'image: {img}, Predicted caption: {predicted_caption}\n')
+                f.write(f'image: {img}, Real captions: {",".join(real_captions)}\n')
+                for i in range(4):
+                    bleu_on_sentence = sentence_bleu(real_captions, predicted_caption,
+                                                     weights=tuple([1.0 if i == j else 0.0 for j in range(4)]))
+                    if prints and counter[i] % 50 == 0:
+                        # print('image: ', img, ', Predicted caption: ', predicted_caption)
+                        # print('Real captions:\n', real_captions)
+                        f.write(f'Bleu{i}, Current Bleu: {bleu_on_sentence}\n')
+                        # print('Current Bleu: ', bleu_on_sentence)
+                        f.write('****************************************\n')
+                        # print('****************************************')
+                    bleu[i] += bleu_on_sentence
+                    counter[i] += 1
+            for i in range(4):
+                bleu[i] = bleu[i] / len(self.imgs_list)
+            f.write(f'Average Bleu score on set: {bleu}')
 
         return bleu
+
 
 random.seed = 42  # Fixing randomness
 images_dir = "/home/student/dvir/ML2_Project/Images/Flicker8k_Dataset/"
@@ -59,7 +72,6 @@ dataset_path = 'dataset'
 image_height = 299
 image_width = 299
 batch_size = 64
-
 
 if __name__ == "__main__":
     feature_extractor = featureextractor()
@@ -76,12 +88,12 @@ if __name__ == "__main__":
 
     model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.encoder.built = True
-    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_4.ckpt')
+    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_5.ckpt')
     model_runner.decoder.built = True
-    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_4.ckpt')
+    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_5.ckpt')
 
-
-    validator = Validator(model_runner, imgs_path='/home/student/dvir/ML2_Project/colorizing_test_imgs/', reference_path=tokens_dir)
+    validator = Validator(model_runner, imgs_path='/home/student/dvir/ML2_Project/Grey_Images/Test_Images/',
+                          reference_path=tokens_dir)
     bleu = validator.bleu_on_set(prints=True)
     print('***************************************')
     print('***************************************')

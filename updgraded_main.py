@@ -4,9 +4,8 @@ from FeatureExtractor import featureextractor
 from ModelRun import modelrun
 
 random.seed = 42  # Fixing randomness
-# images_dirs = ["/home/student/dvir/ML2_Project/Images/Train/", "/home/student/dvir/ML2_Project/Grey_Images/Train/",
-#                "/home/student/dvir/ML2_Project/Colorized_Images/Train/"]
-images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/"]
+images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/", "/home/student/dvir/ML2_Project/Grey_Images/Train_Images/"]
+# images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/"]
 tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
 dataset_path = 'dataset'
 image_height = 299

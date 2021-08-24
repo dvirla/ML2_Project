@@ -143,8 +143,8 @@ class modelrun:
 
             print(f'Time taken for epoch {epoch + 1} is {time.time() - start:.2f} sec\n')
 
-            self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_{epoch}.ckpt')
-            self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_{epoch}.ckpt')
+            self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights_with_grey/encoder_weight_{epoch}.ckpt')
+            self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights_with_grey/decoder_weights_{epoch}.ckpt')
 
             validation_f_per_batch = []
             validation_loss_per_batch = []
@@ -172,23 +172,23 @@ class modelrun:
             print(f'Epoch: {epoch + 1}, train average f measure: {val_avg_f_per_epoch}')
             validation_avg_f_measure_history.append(val_avg_f_per_epoch)
             validation_loss_history.append(validation_loss_per_epoch)
-            counter = 0
-            for i in range(1, len(validation_loss_history)):
-                if np.abs(validation_loss_history[i] - validation_loss_history[i - 1]) < min_delta:
-                    counter += 1
-                else:
-                    counter = 0
-                if counter >= patience:
-                    overfit = (epoch, True)
+            # counter = 0
+            # for i in range(1, len(validation_loss_history)):
+            #     if np.abs(validation_loss_history[i] - validation_loss_history[i - 1]) < min_delta:
+            #         counter += 1
+            #     else:
+            #         counter = 0
+            #     if counter >= patience:
+            #         overfit = (epoch, True)
 
-            if overfit[1]:
-                print("overfit")
-                break
+            # if overfit[1]:
+            #     print("overfit")
+            #     break
         metrics_dict = {'train_loss': train_loss_results, 'train_acc': train_accuracy_results,
                         'val_acc': validation_avg_f_measure_history, 'val_loss': validation_loss_history,
                         'final_epoch': overfit[0]}
 
-        with open('metrics_dict.pkl', 'wb') as f:
+        with open('metrics_dict_with_grey.pkl', 'wb') as f:
             pickle.dump(metrics_dict, f)
 
     def loss_function(self, real, pred):
