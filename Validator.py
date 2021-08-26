@@ -40,7 +40,7 @@ class Validator:
     def bleu_on_set(self, prints=False):
         bleu = [0, 0, 0, 0]
         counter = [0, 0, 0, 0]
-        with open('bleu_scores_regular_model_on_grey_images.txt', 'w') as f:
+        with open('bleu_scores_colorized_model_on_grey_images.txt', 'w') as f:
             for img in tqdm(self.imgs_list):
                 predicted_caption, _ = self.model.perdict_caption(image_path=f'{self.imgs_path}{img}')
                 real_captions = self.imgs_to_caption_list_dict[img]
@@ -88,9 +88,9 @@ if __name__ == "__main__":
 
     model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.encoder.built = True
-    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights/encoder_weight_5.ckpt')
+    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights_with_colorized/encoder_weight_13.ckpt')
     model_runner.decoder.built = True
-    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights/decoder_weights_5.ckpt')
+    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights_with_colorized/decoder_weights_13.ckpt')
 
     validator = Validator(model_runner, imgs_path='/home/student/dvir/ML2_Project/Grey_Images/Test_Images/',
                           reference_path=tokens_dir)

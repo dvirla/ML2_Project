@@ -26,5 +26,5 @@ if __name__ == "__main__":
     params_dict['features_shape'] = 2048
     params_dict['attention_features_shape'] = 64
 
-    model_runner = modelrun(params_dict, feature_extractor, load_images=True)
+    model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.train(epochs=30)
