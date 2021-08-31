@@ -14,12 +14,12 @@ class discriminator(tf.keras.Model):
         self.dense_encoder = denseenconder(self.embedding_dim)
         self.layer1 = tf.keras.layers.Dense(1)
 
-    @tf.function
     def call(self, captions, features):
-        # features = self.dense_encoder(features)
+        # shape after embedding (batch_size, number_words_so_far, embedding_dim)
         captions = self.embedding(captions)
 
-        captions = tf.concat([tf.expand_dims(features, 1), captions], axis=-1)
+        # features after reduce sum and expand shape (batch_size, 1, embedding_dim)
+        captions = tf.concat([tf.expand_dims(tf.reduce_sum(features, axis=1), 1), captions], axis=1)
 
         h_seq, h_state, final_carry_state = self.lstm(captions)  # TODO: check the thing with last_hidden prediction
         pred = tf.nn.sigmoid(self.layer1(h_state))

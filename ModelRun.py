@@ -82,7 +82,7 @@ class modelrun:
                 [tf.float32, tf.int32]),
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-        # tf.data.experimental.save(dataset, self.dataset_path)
+        tf.data.experimental.save(dataset, self.dataset_path)
 
         return dataset
 

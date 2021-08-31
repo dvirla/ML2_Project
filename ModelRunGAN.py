@@ -51,7 +51,7 @@ class modelrungan:
             total_disc_loss = 0
             f_per_batch = []
             for (batch, (img_tensor, target)) in enumerate(train_dataset):
-                gen_loss, disc_loss = self.train_step(img_tensor, target)
+                gen_loss, disc_loss = self.train_step(img_tensor, target, batch)
                 total_gen_loss += gen_loss
                 total_disc_loss += disc_loss
 
@@ -108,18 +108,23 @@ class modelrungan:
             validation_avg_f_measure_history.append(val_avg_f_per_epoch)
             validation_loss_history.append(validation_loss_per_epoch)
 
-        metrics_dict = {'train_gen_loss': train_loss_gen_results, 'train_loss_disc_results': train_loss_disc_results,
-                        'train_acc': train_accuracy_results, 'val_acc': validation_avg_f_measure_history,
-                        'val_loss': validation_loss_history}
+            print(f'finished validation number epoch {epoch + 1}')
 
-        with open('metrics_dict_gan.pkl', 'wb') as f:
-            pickle.dump(metrics_dict, f)
+            metrics_dict = {'train_gen_loss': train_loss_gen_results, 'train_loss_disc_results': train_loss_disc_results,
+                            'train_acc': train_accuracy_results, 'val_acc': validation_avg_f_measure_history,
+                            'val_loss': validation_loss_history}
 
-    @tf.function
-    def train_step(self, img_tensor, target):
+            with open('metrics_dict_gan.pkl', 'wb') as f:
+                pickle.dump(metrics_dict, f)
+
+    def train_step(self, img_tensor, target, batch):
         hidden = self.generator.decoder.reset_state(batch_size=target.shape[0])
 
         gen_dec_input = tf.expand_dims(
+            [self.generator.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
+        predicted_caption = np.empty((target.shape[0], 0), dtype=np.int32)
+
+        disc_dec_input = tf.expand_dims(
             [self.generator.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
         predicted_caption = np.empty((target.shape[0], 0), dtype=np.int32)
 
@@ -133,19 +138,17 @@ class modelrungan:
             for i in range(1, target.shape[1]):
                 # passing the features through the decoder
                 predictions, hidden = self.generator.decoder(gen_dec_input, gen_features, hidden)
-                try:
-                    predicted_id = tf.random.categorical(predictions, 1).numpy()
-                    predicted_caption = np.concatenate((predicted_caption, predicted_id), axis=1)
+                predicted_id = tf.random.categorical(predictions, 1).numpy()
+                predicted_caption = np.concatenate((predicted_caption, predicted_id), axis=1)
 
-                    real_output = self.discriminator(target[:, i], dis_features)
-                    fake_output = self.discriminator(predicted_caption, dis_features)
+                real_output = self.discriminator(disc_dec_input, dis_features)  # tf.expand_dims(target[:, i], 1)
+                fake_output = self.discriminator(predicted_caption, dis_features)
 
-                    gen_loss += self.generator_loss(fake_output)
-                    disc_loss += self.discriminator_loss(real_output, fake_output)
+                gen_loss += self.generator_loss(target[:, i], predictions, fake_output)
+                disc_loss += self.discriminator_loss(real_output, fake_output)
 
-                    gen_dec_input = tf.expand_dims(target[:, i], 1)
-                except AttributeError:
-                    print(tf.random.categorical(predictions, 1))
+                gen_dec_input = tf.expand_dims(target[:, i], 1)
+                disc_dec_input = target[:, :i]
 
         gen_avg_loss = (gen_loss / int(target.shape[1]))
         disc_avg_los = (disc_loss / int(target.shape[1]))
@@ -153,10 +156,10 @@ class modelrungan:
         gen_trainable_variables = self.generator.encoder.trainable_variables + self.generator.decoder.trainable_variables
 
         gradients_of_generator = gen_tape.gradient(gen_loss, gen_trainable_variables)
-        gradients_of_discriminator = disc_tape.gradient(disc_loss, discriminator.trainable_variables)
+        gradients_of_discriminator = disc_tape.gradient(disc_loss, self.discriminator.trainable_variables)
 
         self.generator_optimizer.apply_gradients(zip(gradients_of_generator, gen_trainable_variables))
-        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, discriminator.trainable_variables))
+        self.discriminator_optimizer.apply_gradients(zip(gradients_of_discriminator, self.discriminator.trainable_variables))
 
         return gen_avg_loss, disc_avg_los
 
@@ -166,5 +169,11 @@ class modelrungan:
         total_loss = real_loss + fake_loss
         return total_loss
 
-    def generator_loss(self, fake_output):
-        return self.cross_entropy(tf.ones_like(fake_output), fake_output)
+    def generator_loss(self, real, pred, fake_output):
+        mask = tf.math.logical_not(tf.math.equal(real, 0))
+        loss_ = self.generator.loss_object(real, pred)
+
+        mask = tf.cast(mask, dtype=loss_.dtype)
+        loss_ *= mask
+
+        return tf.reduce_mean(loss_) + tf.constant(1.0)/(tf.reduce_sum(fake_output))

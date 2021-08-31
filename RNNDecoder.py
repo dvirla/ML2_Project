@@ -13,7 +13,7 @@ class rnndecoder(tf.keras.Model):
         self.layer2 = tf.keras.layers.Dense(vocab_size)
         self.attention = attentionmodel(self.dim)
 
-    @tf.function
+
     def call(self, captions, features, hidden):
         # defining attention as a separate model
         context_vector, attention_weights = self.attention(features, hidden)
