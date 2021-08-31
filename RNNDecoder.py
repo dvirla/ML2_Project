@@ -14,27 +14,27 @@ class rnndecoder(tf.keras.Model):
         self.attention = attentionmodel(self.dim)
 
     @tf.function
-    def call(self, x, features, hidden):
+    def call(self, captions, features, hidden):
         # defining attention as a separate model
         context_vector, attention_weights = self.attention(features, hidden)
-        # x shape after passing through embedding == (batch_size, 1, embedding_dim)
-        x = self.embedding(x)
-        # x shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
-        x = tf.concat([tf.expand_dims(context_vector, 1), x], axis=-1)
+        # captions shape after passing through embedding == (batch_size, 1, embedding_dim)
+        captions = self.embedding(captions)
+        # captions shape after concatenation == (batch_size, 1, embedding_dim + hidden_size)
+        captions = tf.concat([tf.expand_dims(context_vector, 1), captions], axis=-1)
 
         # passing the concatenated vector to the LSTM
-        h_seq, state, final_carry_state = self.lstm(x)
+        h_seq, state, final_carry_state = self.lstm(captions)
 
         # shape == (batch_size, max_length, hidden_size)
-        x = self.layer1(h_seq)
+        captions = self.layer1(h_seq)
 
-        # x shape == (batch_size * max_length, hidden_size)
-        x = tf.reshape(x, (-1, x.shape[2]))
+        # captions shape == (batch_size * max_length, hidden_size)
+        captions = tf.reshape(captions, (-1, captions.shape[2]))
 
         # output shape == (batch_size * max_length, vocab)
-        x = self.layer2(x)
+        captions = self.layer2(captions)
 
-        return x, state
+        return captions, state
 
     def reset_state(self, batch_size):
         return tf.zeros((batch_size, self.dim))

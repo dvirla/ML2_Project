@@ -11,6 +11,7 @@ import numpy as np
 import pickle
 import os
 
+
 class modelrun:
     def __init__(self, params_dict, feature_extractor, load_images=False, optimizer=None, loss_object=None):
         self.images_dirs = params_dict['images_dirs']
@@ -81,21 +82,16 @@ class modelrun:
                 [tf.float32, tf.int32]),
             num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-        tf.data.experimental.save(dataset, self.dataset_path)
+        # tf.data.experimental.save(dataset, self.dataset_path)
 
         return dataset
 
-    def train(self, epochs=20, patience=5, min_delta=1e-3):
+    def train(self, epochs=20):
         # Loading saved dataset
         dataset = tf.data.experimental.load(
             self.dataset_path) if not self.load_images else self.prepare_dataset()
 
-        # test__val_dataset = dataset.take(2000)
-        # test_dataset = test__val_dataset.take(1000)
         val_dataset = dataset.take(1000)
-
-        # test_dataset = test_dataset.batch(self.batch_size)
-        # test_dataset = test_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
         val_dataset = val_dataset.batch(self.batch_size)
         val_dataset = val_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
@@ -109,7 +105,6 @@ class modelrun:
         train_accuracy_results = []
         validation_avg_f_measure_history = []
         validation_loss_history = []
-        overfit = (0, False)
 
         for epoch in range(epochs):
             epoch_loss_avg = tf.keras.metrics.Mean()
@@ -163,30 +158,16 @@ class modelrun:
                 val_avg_f_per_epoch = sum([sum(x) for x in val_avg_f_per_epoch]) / (
                             len(val_avg_f_per_epoch[-2]) * (val_avg_f_per_epoch.shape[0] - 1) + len(
                         val_avg_f_per_epoch[-1]))
-                # validation_loss_per_epoch = sum([sum(x) for x in validation_loss_per_epoch]) / (len(validation_loss_per_epoch[-2]) * (validation_loss_per_epoch.shape[0] - 1) + len(validation_loss_per_epoch[-1]))
 
             else:
                 val_avg_f_per_epoch = np.mean(val_avg_f_per_epoch)
-                # validation_loss_per_epoch = np.mean(validation_loss_per_epoch)
 
             print(f'Epoch: {epoch + 1}, train average f measure: {val_avg_f_per_epoch}')
             validation_avg_f_measure_history.append(val_avg_f_per_epoch)
             validation_loss_history.append(validation_loss_per_epoch)
-            # counter = 0
-            # for i in range(1, len(validation_loss_history)):
-            #     if np.abs(validation_loss_history[i] - validation_loss_history[i - 1]) < min_delta:
-            #         counter += 1
-            #     else:
-            #         counter = 0
-            #     if counter >= patience:
-            #         overfit = (epoch, True)
 
-            # if overfit[1]:
-            #     print("overfit")
-            #     break
         metrics_dict = {'train_loss': train_loss_results, 'train_acc': train_accuracy_results,
-                        'val_acc': validation_avg_f_measure_history, 'val_loss': validation_loss_history,
-                        'final_epoch': overfit[0]}
+                        'val_acc': validation_avg_f_measure_history, 'val_loss': validation_loss_history}
 
         with open('metrics_dict_with_grey.pkl', 'wb') as f:
             pickle.dump(metrics_dict, f)
@@ -248,7 +229,7 @@ class modelrun:
                 loss += self.loss_function(target[:, i], predictions)
                 predicted_id = tf.random.categorical(predictions, 1).numpy()
                 res = np.concatenate((res, predicted_id), axis=1)
-                # using teacher forcing
+
                 dec_input = tf.expand_dims(target[:, i], 1)
 
         total_loss = (loss / int(target.shape[1]))

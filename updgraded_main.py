@@ -2,9 +2,10 @@ from collections import defaultdict
 import random
 from FeatureExtractor import featureextractor
 from ModelRun import modelrun
+from ModelRunGAN import modelrungan
 
 random.seed = 42  # Fixing randomness
-images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/", "/home/student/dvir/ML2_Project/Grey_Images/Train_Images/"]
+images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/"]
 # images_dirs = ["/home/student/dvir/ML2_Project/Images/Train_Images/"]
 tokens_dir = "Flickr8k_text/Flickr8k.token.txt"
 dataset_path = 'dataset'
@@ -26,5 +27,5 @@ if __name__ == "__main__":
     params_dict['features_shape'] = 2048
     params_dict['attention_features_shape'] = 64
 
-    model_runner = modelrun(params_dict, feature_extractor, load_images=False)
-    model_runner.train(epochs=30)
+    model_runner = modelrungan(params_dict, feature_extractor, load_images=True)
+    model_runner.train(epochs=50)
