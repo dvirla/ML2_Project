@@ -28,19 +28,18 @@ class Validator:
                 all_imgs_to_captions_dict[f'{img}'].append(caption)
 
         for img_file_name in os.listdir(self.imgs_path):
-            # if img_file_name[:5] == 'grey_':
-            #     self.imgs_list.append(img_file_name)
-            #     self.imgs_to_caption_list_dict[img_file_name] = all_imgs_to_captions_dict[img_file_name[:5]]
-            #     continue
             self.imgs_list.append(img_file_name)
             self.imgs_to_caption_list_dict[img_file_name] = all_imgs_to_captions_dict[img_file_name]
 
-        return
-
     def bleu_on_set(self, prints=False):
+        """
+        Generating a file with generated caption and real captions for each image in the test set, while calculating
+        BLEU scores for each generated caption
+        :return: Average BLEU scores for each n-gram where 0<n<5
+        """
         bleu = [0, 0, 0, 0]
         counter = [0, 0, 0, 0]
-        with open('bleu_scores_colorized_model_on_grey_images.txt', 'w') as f:
+        with open('bleu_scores_gan_original_images.txt', 'w') as f:
             for img in tqdm(self.imgs_list):
                 predicted_caption, _ = self.model.perdict_caption(image_path=f'{self.imgs_path}{img}')
                 real_captions = self.imgs_to_caption_list_dict[img]
@@ -50,12 +49,8 @@ class Validator:
                     bleu_on_sentence = sentence_bleu(real_captions, predicted_caption,
                                                      weights=tuple([1.0 if i == j else 0.0 for j in range(4)]))
                     if prints and counter[i] % 50 == 0:
-                        # print('image: ', img, ', Predicted caption: ', predicted_caption)
-                        # print('Real captions:\n', real_captions)
                         f.write(f'Bleu{i}, Current Bleu: {bleu_on_sentence}\n')
-                        # print('Current Bleu: ', bleu_on_sentence)
                         f.write('****************************************\n')
-                        # print('****************************************')
                     bleu[i] += bleu_on_sentence
                     counter[i] += 1
             for i in range(4):
@@ -88,11 +83,11 @@ if __name__ == "__main__":
 
     model_runner = modelrun(params_dict, feature_extractor, load_images=False)
     model_runner.encoder.built = True
-    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights_with_colorized/encoder_weight_13.ckpt')
+    model_runner.encoder.load_weights('/home/student/dvir/ML2_Project/encoder_weights_gan/encoder_weight_40.ckpt')
     model_runner.decoder.built = True
-    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights_with_colorized/decoder_weights_13.ckpt')
+    model_runner.decoder.load_weights('/home/student/dvir/ML2_Project/decoder_weights_gan/decoder_weights_40.ckpt')
 
-    validator = Validator(model_runner, imgs_path='/home/student/dvir/ML2_Project/Grey_Images/Test_Images/',
+    validator = Validator(model_runner, imgs_path='/home/student/dvir/ML2_Project/Test_Images/',
                           reference_path=tokens_dir)
     bleu = validator.bleu_on_set(prints=True)
     print('***************************************')

@@ -8,7 +8,11 @@ class denseenconder(tf.keras.Model):
         self.layer1 = tf.keras.layers.Dense(embedding_dim)
 
     @tf.function
-    def call(self, x):
-        x = self.layer1(x)
-        x = tf.nn.relu(x)
+    def call(self, features):
+        """
+        :param features: Features of a given batch/image.
+        :return: x = The features after passing through a fc layer and then relu function to try and find best features
+        """
+        features = self.layer1(features)
+        x = tf.nn.relu(features)
         return x

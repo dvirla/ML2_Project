@@ -21,15 +21,13 @@ class modelrun:
         self.load_images = load_images
         self.embedding_dim = params_dict['embedding_dim']
         self.dims = params_dict['dims']
-        # Shape feature vectors == (64, 2048)
         self.features_shape = params_dict['features_shape']
         self.attention_features_shape = params_dict['attention_features_shape']
 
         self.feature_extractor = feature_extractor
         self.img_to_captions_dict = self.parse_images_captions_file()
-        self.caption_processor = captionprocessor(
-            self.img_to_captions_dict) if self.dataset_path is not None else None
-        self.vocab_size = self.caption_processor.vocab_size if self.dataset_path is not None else None  # 8425
+        self.caption_processor = captionprocessor(self.img_to_captions_dict) if self.dataset_path is not None else None
+        self.vocab_size = self.caption_processor.vocab_size if self.dataset_path is not None else None
 
         self.decoder = rnndecoder(self.embedding_dim, self.dims, self.vocab_size)
         self.encoder = denseenconder(self.embedding_dim)
@@ -37,7 +35,6 @@ class modelrun:
         self.optimizer = optimizer if optimizer is not None else tf.keras.optimizers.Adam()
         self.loss_object = loss_object if loss_object is not None else tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction='none')
-        # if model_version is not None:
 
     def parse_images_captions_file(self):
         """
@@ -58,8 +55,6 @@ class modelrun:
         image_features_loader = imagefeaturesloader(list(self.img_to_captions_dict.keys()), self.images_dirs,
                                                     self.feature_extractor)
         image_features_loader.load_images()
-
-        # self.caption_processor = captionprocessor(self.img_to_captions_dict, train_imgs, test_imgs)
         self.caption_processor = captionprocessor(self.img_to_captions_dict)
         self.vocab_size = self.caption_processor.vocab_size
 
@@ -87,12 +82,10 @@ class modelrun:
         return dataset
 
     def train(self, epochs=20):
-        # Loading saved dataset
+        # Loading saved dataset or creating new one if there is no saved dataset
         dataset = tf.data.experimental.load(
             self.dataset_path) if not self.load_images else self.prepare_dataset()
-
         val_dataset = dataset.take(1000)
-
         val_dataset = val_dataset.batch(self.batch_size)
         val_dataset = val_dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
 
@@ -118,6 +111,7 @@ class modelrun:
 
                 # Track progress
                 epoch_loss_avg.update_state(t_loss)  # Add current batch loss
+                # Adding current batch precision
                 f_per_batch.append(text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
                                                         tf.ragged.constant(self.predict_per_batch(img_tensor,
                                                                                                   target)[0]),
@@ -141,13 +135,13 @@ class modelrun:
             self.encoder.save_weights(f'/home/student/dvir/ML2_Project/encoder_weights_with_grey/encoder_weight_{epoch}.ckpt')
             self.decoder.save_weights(f'/home/student/dvir/ML2_Project/decoder_weights_with_grey/decoder_weights_{epoch}.ckpt')
 
+            # Tracking current validation loss and precision
             validation_f_per_batch = []
             validation_loss_per_batch = []
             for (batch, (img_tensor, target)) in enumerate(val_dataset):
                 predictions, t_loss = self.predict_per_batch(img_tensor, target)
                 result = text.metrics.rouge_l(tf.ragged.constant(target.numpy()),
                                               tf.ragged.constant(predictions), alpha=1).f_measure.numpy()
-                # avg_f_measure = np.mean(result)
                 validation_f_per_batch.append(result)
                 validation_loss_per_batch.append(t_loss)
 
@@ -173,9 +167,17 @@ class modelrun:
             pickle.dump(metrics_dict, f)
 
     def loss_function(self, real, pred):
+        """
+        :param real: Real captions from train/validation sets
+        :param pred: Generated captions for train/validation sets
+        :return: Final loss for current generated captions
+        """
+        # Creating a mask to ignore the zeros from the real captions = 'startcap' word before reducing to sum since
+        # we are not interested in this generated word
         mask = tf.math.logical_not(tf.math.equal(real, 0))
-        loss_ = self.loss_object(real, pred)
 
+        # SparseCategoricalCrossentropy between the real and generated captions
+        loss_ = self.loss_object(real, pred)
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
 
@@ -183,66 +185,74 @@ class modelrun:
 
     @tf.function
     def train_step(self, img_tensor, target):
+        """
+        :param img_tensor: Batch of images features
+        :param target: Batch of the real target captions
+        :return: Total loss and average loss over the batch
+        """
         loss = 0
 
         # initializing the hidden state for each batch
-        # because the captions are not related from image to image
         hidden = self.decoder.reset_state(batch_size=target.shape[0])
-
+        # Initializing the new captions to 'startcap'
         dec_input = tf.expand_dims([self.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
 
         with tf.GradientTape() as tape:
             features = self.encoder(img_tensor)
 
             for i in range(1, target.shape[1]):
-                # passing the features through the decoder
+                # passing the features through the decoder and generating the loss over the predicted captions
                 predictions, hidden = self.decoder(dec_input, features, hidden)
-
                 loss += self.loss_function(target[:, i], predictions)
-
-                # using teacher forcing
+                # "making room" for new word to come
                 dec_input = tf.expand_dims(target[:, i], 1)
+        avg_loss = (loss / int(target.shape[1]))
 
-        total_loss = (loss / int(target.shape[1]))
-
+        # Backpropogating the gradients for all trainable variables
         trainable_variables = self.encoder.trainable_variables + self.decoder.trainable_variables
-
         gradients = tape.gradient(loss, trainable_variables)
-
         self.optimizer.apply_gradients(zip(gradients, trainable_variables))
 
-        return loss, total_loss
+        return loss, avg_loss
 
     def predict_per_batch(self, img_tensor, target):
+        """
+        :param img_tensor: Batch of images features
+        :param target: Batch of the real target captions
+        :return: New generated captions for the given batch and average loss
+        """
         hidden = self.decoder.reset_state(batch_size=target.shape[0])
-
         dec_input = tf.expand_dims([self.caption_processor.tokenizer.word_index['startcap']] * target.shape[0], 1)
 
         res = np.empty((target.shape[0], 0), dtype=np.int32)
         loss = 0
-        with tf.GradientTape() as tape:
-            features = self.encoder(img_tensor)
+        features = self.encoder(img_tensor)
 
-            for i in range(1, target.shape[1]):
-                # passing the features through the decoder
-                predictions, hidden = self.decoder(dec_input, features, hidden)
-                loss += self.loss_function(target[:, i], predictions)
-                predicted_id = tf.random.categorical(predictions, 1).numpy()
-                res = np.concatenate((res, predicted_id), axis=1)
+        for i in range(1, target.shape[1]):
+            # passing the features through the decoder
+            predictions, hidden = self.decoder(dec_input, features, hidden)
+            loss += self.loss_function(target[:, i], predictions)
+            # Adding new words to current captions based on the new predictions
+            predicted_id = tf.random.categorical(predictions, 1).numpy()
+            res = np.concatenate((res, predicted_id), axis=1)
+            # "making room" for new word to come
+            dec_input = tf.expand_dims(target[:, i], 1)
+        avg_loss = (loss / int(target.shape[1]))
 
-                dec_input = tf.expand_dims(target[:, i], 1)
-
-        total_loss = (loss / int(target.shape[1]))
-
-        return res, total_loss
+        return res, avg_loss
 
     def perdict_caption(self, image_path=None, features=None):
+        """
+        :param image_path: Path to load image, if None features needs to be provided
+        :param features: Image features, if None image path should be provided
+        :return: Real caption and its vector representation
+        """
         hidden = self.decoder.reset_state(batch_size=1)
-
         dec_input = tf.expand_dims([self.caption_processor.tokenizer.word_index['startcap']], 0)
         caption = []
         caption_vec = []
 
+        # Loading features if needed
         if features is None:
             temp_input = tf.expand_dims(self.feature_extractor.load_image(image_path)[0], 0)
             img_tensor_val = self.feature_extractor.image_features_extract_model(temp_input)
@@ -253,15 +263,13 @@ class modelrun:
 
         for i in range(self.caption_processor.max_caption_len):
             predictions, hidden = self.decoder(dec_input, features, hidden)
-
             predicted_id = tf.random.categorical(predictions, 1)[0][0].numpy()
-
+            # If the new predicted word is 'endcap' stop predicting and return output
             if self.caption_processor.tokenizer.index_word[predicted_id] == 'endcap':
                 return " ".join(caption), caption_vec
 
             caption.append(self.caption_processor.tokenizer.index_word[predicted_id])
             caption_vec.append(predicted_id)
-
             dec_input = tf.expand_dims([predicted_id], 0)
 
         return " ".join(caption), caption_vec

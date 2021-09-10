@@ -164,15 +164,27 @@ class modelrungan:
         return gen_avg_loss, disc_avg_los
 
     def discriminator_loss(self, real_output, fake_output):
+        """
+        :param real_output: The predictions vector over the real captions
+        :param fake_output: The predictions vector over the generated captions
+        :return: Sum of real_loss and fake_loss where:
+        real_loss = binary cross entropy between vector of 1's and the real_output vector
+        fake_liss = binary cross entropy between vector of 0's and the fake_output vector
+        """
         real_loss = self.cross_entropy(tf.ones_like(real_output), real_output)
         fake_loss = self.cross_entropy(tf.zeros_like(fake_output), fake_output)
         total_loss = real_loss + fake_loss
         return total_loss
 
     def generator_loss(self, real, pred, fake_output):
+        """
+        :param real: Real captions from train/validation sets
+        :param pred: Generated captions for train/validation sets
+        :param fake_output: The predictions vector over the generated captions
+        :return: Final loss for current generated captions + "reward" (how well the generator tricked the discriminator)
+        """
         mask = tf.math.logical_not(tf.math.equal(real, 0))
         loss_ = self.generator.loss_object(real, pred)
-
         mask = tf.cast(mask, dtype=loss_.dtype)
         loss_ *= mask
 

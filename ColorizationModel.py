@@ -18,10 +18,8 @@ class Colorizer:
                                                                         batch_size=64, class_mode=None)
         self.X = []
         self.Y = []
-
         self.encoder = Sequential()
         self.model = Sequential()
-
         self.encoder_setup()
 
     def setup(self, model_path, history_path):
@@ -30,6 +28,10 @@ class Colorizer:
         self.fit(200, model_path, history_path)
 
     def prepare_training_dataset(self):
+        """
+        Converting training set images to lab format where the first matrix is greyscale and the label is the other
+        two matrices
+        """
         for i, batch in enumerate(self.training_set):
             if i > 97:
                 break
@@ -38,13 +40,14 @@ class Colorizer:
                 L_a_b = rgb2lab(img)
                 self.X.append(L_a_b[:, :, 0])
                 self.Y.append(L_a_b[:, :, 1:] / 128)
-
         self.X = np.array(self.X)
         self.Y = np.array(self.Y)
         self.X = self.X.reshape(self.X.shape + (1,))  # dimensions to be the same for X and Y
 
     def encoder_setup(self):
-        # Encoder
+        """
+        Generating self.encoder which includes first 19 layers of VGG16
+        """
         VGG_model = VGG16()
         for i, layer in enumerate(VGG_model.layers):
             if i < 19:
@@ -53,7 +56,9 @@ class Colorizer:
             layer.trainable = False
 
     def model_setup(self):
-        # Decoder
+        """
+        Generating self.model which is a sequential model to produce a new image using UpSampling2D
+        """
         self.model.add(Conv2D(256, (3, 3), activation='relu', padding='same', input_shape=(7, 7, 512)))
         self.model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
         self.model.add(UpSampling2D((2, 2)))
@@ -78,14 +83,14 @@ class Colorizer:
             restore_best_weights=True,
         )
 
+        # Extracting features from the train images using the encoder
         extracted_features = []
         for i, img in enumerate(self.X):
             img = gray2rgb(img)
             img = img.reshape((1, 224, 224, 3))
-            prediction = self.encoder.predict(img)
-            prediction = prediction.reshape((7, 7, 512))
-            extracted_features.append(prediction)
-
+            predicted_features = self.encoder.predict(img)
+            predicted_features = predicted_features.reshape((7, 7, 512))
+            extracted_features.append(predicted_features)
         extracted_features = np.array(extracted_features)
 
         self.model.compile(optimizer='Adam', loss='mse', metrics=['accuracy'])
@@ -99,11 +104,8 @@ class Colorizer:
 
         self.model.save(model_path)
 
-        try:
-            with open(history_path + 'model_history.pkl', 'wb') as f:
-                pickle.dump(history, f)
-        except:
-            pass
+        with open(history_path + 'model_history.pkl', 'wb') as f:
+            pickle.dump(history, f)
 
     def load_model(self, path):
         self.model = tf.keras.models.load_model(path, custom_objects=None, compile=True)

@@ -17,20 +17,20 @@ class imagefeaturesloader:
         self.feature_extractor = feature_extractor
 
     def load_images(self):
-        # Splitting the image list into train, test sets
-        # random.shuffle(self.images_list)
+        """
+        Loading the image and passing them through the feature extractor using the map function, creating
+        self.image_dataset which maps each image feature to its path.
+        """
         images_paths = []
         images_set = set(os.listdir(self.images_dirs[0])).intersection(set(self.images_list))
         for directory in self.images_dirs:
             for img in images_set:
                 images_paths.append(f'{directory}{img}')
-            # images_paths += [f'{dir}{name}' for name in self.images_list]
         unique_set = sorted(set(images_paths))
 
         self.image_dataset = tf.data.Dataset.from_tensor_slices(unique_set)
         self.image_dataset = self.image_dataset.map(
-            self.feature_extractor.load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(
-            16)  # Mapping images to their paths
+            self.feature_extractor.load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE).batch(16)
 
         self.images_features_dict = self.create_features()
 
@@ -39,7 +39,6 @@ class imagefeaturesloader:
         :return: images_features_dict maps image path to its features extracted from feature_extractor
         """
         images_features_dict = defaultdict(np.array)
-        # Extracting features for each batch, reshaping
         for img, path in tqdm(self.image_dataset):
             try:
                 batch_features = self.feature_extractor.image_features_extract_model(img)
