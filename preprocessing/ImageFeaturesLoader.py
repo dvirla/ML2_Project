@@ -7,7 +7,6 @@ import os
 
 random.seed = 42  # Fixing randomness
 
-
 class imagefeaturesloader:
     def __init__(self, images_list, images_dirs, feature_extractor):
         self.images_list = images_list
