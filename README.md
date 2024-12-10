@@ -17,3 +17,7 @@ Developed as part of an academic course in 2021, the project applies advanced me
 -   **GAN-Aided Captioning**: Enhances sentence fluency and coherence using a generative adversarial network (GAN).
 
 -   **Evaluation with BLEU Scores**: Quantifies model accuracy across formats with detailed BLEU score comparisons.
+
+<div align="center">
+  <img src="https://media.licdn.com/dms/image/v2/C4E22AQGBYkKE27OxRg/feedshare-shrink_1280/feedshare-shrink_1280/0/1641283513992?e=1736985600&v=beta&t=gMqo6ZGxRq4DkwH5CVxU1yin7gGpPld9kKw053MIBP4" alt="Descriptive Alt Text" width="600">
+</div>
